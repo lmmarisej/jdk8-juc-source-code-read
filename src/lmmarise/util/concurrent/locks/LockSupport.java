@@ -170,6 +170,10 @@ public class LockSupport extends AbstractQueuedSynchronizer {
      * @param blocker the synchronization object responsible for this
      *        thread parking
      * @since 1.6
+     *
+     * 线程主动调用park，将自己阻塞。
+     *
+     * park函数被唤醒有两种情况：1、其它线程调用Unsafe#unpark(thread) 2、其它线程调用thread.interrupt()
      */
     public static void park(Object blocker) {
         Thread t = Thread.currentThread();

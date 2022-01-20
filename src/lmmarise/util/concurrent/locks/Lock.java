@@ -202,8 +202,9 @@ public interface Lock {
      * @throws InterruptedException if the current thread is
      *         interrupted while acquiring the lock (and interruption
      *         of lock acquisition is supported)
+     *
+     * 可中断的锁获取。
      */
-    //获取锁，响应中断，如果锁不可用则线程一直等待
     void lockInterruptibly() throws InterruptedException;
 
     /**

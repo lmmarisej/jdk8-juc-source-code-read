@@ -129,15 +129,15 @@ public class ReentrantLock extends lmmarise.util.concurrent.locks.AbstractQueued
         final boolean nonfairTryAcquire(int acquires) {
             final Thread current = Thread.currentThread();
             int c = getState();
-            if (c == 0) {
-                if (compareAndSetState(0, acquires)) {//CAS修改state
-                    setExclusiveOwnerThread(current);
-                    return true;
+            if (c == 0) {   // 无人持有锁
+                if (compareAndSetState(0, acquires)) {      // 尝试抢锁
+                    setExclusiveOwnerThread(current);       // 将自己设置为持有锁的线程
+                    return true;        // 返回抢锁成功
                 }
             }
-            else if (current == getExclusiveOwnerThread()) {
-                int nextc = c + acquires;//计算重入后的state
-                if (nextc < 0) // overflow
+            else if (current == getExclusiveOwnerThread()) {        // 是自己持有锁，直接重入
+                int nextc = c + acquires;
+                if (nextc < 0)      // overflow
                     throw new Error("Maximum lock count exceeded");
                 setState(nextc);
                 return true;
@@ -146,15 +146,15 @@ public class ReentrantLock extends lmmarise.util.concurrent.locks.AbstractQueued
         }
 
         protected final boolean tryRelease(int releases) {
-            int c = getState() - releases;//计算释放后的state值
-            if (Thread.currentThread() != getExclusiveOwnerThread())
+            int c = getState() - releases;
+            if (Thread.currentThread() != getExclusiveOwnerThread())        // 只有锁的拥有者线程，有有资格调用unlock函数
                 throw new IllegalMonitorStateException();
             boolean free = false;
-            if (c == 0) {
-                free = true;//锁全部释放，可以唤醒下一个等待线程
-                setExclusiveOwnerThread(null);//设置锁持有线程为null
+            if (c == 0) {       // 每调用一次unlock，state-1，直到为0才释放锁
+                free = true;   // 表示完全释放
+                setExclusiveOwnerThread(null);
             }
-            setState(c);
+            setState(c);        // 只有一个线程能调用，无需CAS
             return free;
         }
 
@@ -233,22 +233,23 @@ public class ReentrantLock extends lmmarise.util.concurrent.locks.AbstractQueued
         protected final boolean tryAcquire(int acquires) {
             final Thread current = Thread.currentThread();
             int c = getState();//获取锁状态state
-            if (c == 0) {
-                if (!hasQueuedPredecessors() && //判断当前线程是否还有前节点
-                    compareAndSetState(0, acquires)) {//CAS修改state
-                    //获取锁成功，设置锁的持有线程为当前线程
+            if (c == 0) {   // 没有线程持有锁
+                if (!hasQueuedPredecessors() && // 判断当前线程是否还有前节点
+                    compareAndSetState(0, acquires)) {// CAS修改state
+                    // 获取锁成功，设置锁的持有线程为当前线程
                     setExclusiveOwnerThread(current);
                     return true;
                 }
             }
-            else if (current == getExclusiveOwnerThread()) {//当前线程已经持有锁
-                int nextc = c + acquires;//重入
+            // 持有锁的线程是当前线程，进行重入处理
+            else if (current == getExclusiveOwnerThread()) {
+                int nextc = c + acquires;
                 if (nextc < 0)
                     throw new Error("Maximum lock count exceeded");
-                setState(nextc);//更新state状态
+                setState(nextc);        // 修改State计数
                 return true;
             }
-            return false;
+            return false;       // 有其它线程持有锁，获取锁失败
         }
     }
 
@@ -366,7 +367,7 @@ public class ReentrantLock extends lmmarise.util.concurrent.locks.AbstractQueued
      *         thread; and {@code false} otherwise
      */
     public boolean tryLock() {
-        return sync.nonfairTryAcquire(1);
+        return sync.nonfairTryAcquire(1);       // 直接基于非公平锁
     }
 
     /**
@@ -456,8 +457,9 @@ public class ReentrantLock extends lmmarise.util.concurrent.locks.AbstractQueued
      *
      * @throws IllegalMonitorStateException if the current thread does not
      *         hold this lock
+     *
+     * unlock 不区分是否公平锁。
      */
-    //释放锁
     public void unlock() {
         sync.release(1);
     }

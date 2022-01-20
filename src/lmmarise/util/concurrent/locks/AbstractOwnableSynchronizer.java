@@ -79,6 +79,8 @@ public abstract class AbstractOwnableSynchronizer
      * or {@code null} if never set.  This method does not otherwise
      * impose any synchronization or {@code volatile} field accesses.
      * @return the owner thread
+     *
+     * 获取持有当前锁的线程。
      */
     protected final Thread getExclusiveOwnerThread() {
         return exclusiveOwnerThread;

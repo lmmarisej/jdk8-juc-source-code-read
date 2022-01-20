@@ -295,7 +295,7 @@ public class StampedLock extends AbstractQueuedSynchronizer implements java.io.S
 
     /** Maximum number of retries before enqueuing on acquisition */
     //获取锁失败入队之前的最大自旋次数（实际运行时并不一定是这个数）
-    private static final int SPINS = (NCPU > 1) ? 1 << 6 : 0;
+    private static final int SPINS = (NCPU > 1) ? 1 << 6 : 0;       // 单核CPU不能自旋
 
     /** Maximum number of retries before blocking at head on acquisition */
     //头节点获取锁的最大自旋次数
@@ -314,12 +314,12 @@ public class StampedLock extends AbstractQueuedSynchronizer implements java.io.S
     private static final int LG_READERS = 7;
 
     // Values for lock state and stamp operations
-    private static final long RUNIT = 1L;//读锁单位
-    private static final long WBIT  = 1L << LG_READERS;//写状态标识 1000 0000
-    private static final long RBITS = WBIT - 1L;//读状态标识 111 1111
-    private static final long RFULL = RBITS - 1L; //读锁最大资源数 111 1110
-    private static final long ABITS = RBITS | WBIT; //用于获取锁状态 1111 1111
-    private static final long SBITS = ~RBITS; //note overlap with ABITS
+    private static final long RUNIT = 1L;               //
+    private static final long WBIT  = 1L << LG_READERS; // 第8位表示写锁
+    private static final long RBITS = WBIT - 1L;        // 最低的7位表示读锁
+    private static final long RFULL = RBITS - 1L;       // 读锁数目
+    private static final long ABITS = RBITS | WBIT;     // 读锁和写锁的状态合到一起
+    private static final long SBITS = ~RBITS;           //
 
     // Initial value for lock state; avoid failure value zero
     //锁状态初始值
@@ -588,9 +588,9 @@ public class StampedLock extends AbstractQueuedSynchronizer implements java.io.S
         WNode h;
         if (state != stamp || (stamp & WBIT) == 0L)
             throw new IllegalMonitorStateException();
-        state = (stamp += WBIT) == 0L ? ORIGIN : stamp;
+        state = (stamp += WBIT) == 0L ? ORIGIN : stamp;     // 将state复原，需要先清除state持有信息（相当于释放锁），再调用唤醒函数，唤醒队列从某个节点的线程，以获取锁
         if ((h = whead) != null && h.status != 0)
-            release(h);
+            release(h);     // 唤醒队列中从头开始数的第一个有效的的节点
     }
 
     /**
@@ -1082,7 +1082,7 @@ public class StampedLock extends AbstractQueuedSynchronizer implements java.io.S
                         q = t;
             }
             if (q != null && (w = q.thread) != null)
-                U.unpark(w);
+                U.unpark(w);        // 唤醒该线程
         }
     }
 
@@ -1094,10 +1094,14 @@ public class StampedLock extends AbstractQueuedSynchronizer implements java.io.S
      * @param deadline if nonzero, the System.nanoTime value to timeout
      * at (and return zero)
      * @return next state, or INTERRUPTED
+     *
+     * 自旋获取锁。
      */
     private long acquireWrite(boolean interruptible, long deadline) {
         WNode node = null, p;
-        //第一个自旋，准备入队
+
+
+        // 将node加入队列尾部，一边加入，一边尝试通过CAS操作获取锁。获得锁，整个函数直接返回，否则一直自旋，直到加入队列尾部。
         for (int spins = -1;;) { // spin while enqueuing
             long m, s, ns;
             if ((m = (s = state) & ABITS) == 0L) {//锁可用
@@ -1121,24 +1125,24 @@ public class StampedLock extends AbstractQueuedSynchronizer implements java.io.S
                 node.prev = p;
             else if (U.compareAndSwapObject(this, WTAIL, p, node)) {//更新tail节点
                 p.next = node;
-                break;
+                break;      // cas tail成功
             }
         }
 
-        //第二个自旋，节点依次获取锁
+        // 此时node一定在队列中，
         for (int spins = -1;;) {
             WNode h, np, pp; int ps;
-            if ((h = whead) == p) {//当前节点是最后一个等待节点
+            if ((h = whead) == p) {     // 发现自己正好在头部，继续新一轮的自旋
                 if (spins < 0)
-                    spins = HEAD_SPINS; //头结点自旋次数
-                else if (spins < MAX_HEAD_SPINS)
+                    spins = HEAD_SPINS; // 头结点自旋次数
+                else if (spins < MAX_HEAD_SPINS)        // 本次自旋，自旋次数直到到达MAX_HEAD_SPINS，才结束
                     spins <<= 1; // spins=spins/2
                 for (int k = spins;;) { // spin at head
                     long s, ns;
-                    if (((s = state) & ABITS) == 0L) {//锁可用
+                    if (((s = state) & ABITS) == 0L) {// 再次尝试拿锁
                         if (U.compareAndSwapLong(this, STATE, s,
                                                  ns = s + WBIT)) {//更新锁状态
-                            //更新头结点，返回stamp
+                            // 更新头结点，返回stamp
                             whead = node;
                             node.prev = null;
                             return ns;
@@ -1151,7 +1155,7 @@ public class StampedLock extends AbstractQueuedSynchronizer implements java.io.S
             }
             else if (h != null) { // help release stale waiters
                 WNode c; Thread w;
-                //依次唤醒头节点的cowait节点线程
+                // 自己从阻塞中唤醒，依次唤醒cowait中的所有reader线程（cowait串联相邻的所有读线程，将其一起唤醒，因为读线程不互斥）
                 while ((c = h.cowait) != null) {//有等待读的线程
                     if (U.compareAndSwapObject(h, WCOWAIT, c, c.cowait) && //CAS更新头结点的cowait
                         (w = c.thread) != null)
@@ -1183,7 +1187,7 @@ public class StampedLock extends AbstractQueuedSynchronizer implements java.io.S
                     node.thread = wt;
                     if (p.status < 0 && (p != h || (state & ABITS) != 0L) &&
                         whead == h && node.prev == p)
-                        U.park(false, time);  // emulate LockSupport.park
+                        U.park(false, time);  // emulate LockSupport.park  进入阻塞状态，之后被另外一个线程release唤醒，接着往下执行这个for循环
                     node.thread = null;
                     U.putObject(wt, PARKBLOCKER, null);
                     if (interruptible && Thread.interrupted())

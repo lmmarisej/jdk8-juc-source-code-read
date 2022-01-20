@@ -260,6 +260,7 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
      */
     public ReentrantReadWriteLock(boolean fair) {
         sync = fair ? new FairSync() : new NonfairSync();
+        // 可以看出，读写锁用的是同一sync同步器
         readerLock = new ReadLock(this);
         writerLock = new WriteLock(this);
     }
@@ -284,14 +285,22 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
          */
 
         static final int SHARED_SHIFT   = 16;
-        static final int SHARED_UNIT    = (1 << SHARED_SHIFT);
+        // 一个能表示一个char范围的变量，超过16位部分会被丢弃。使用方法：用来与一个表示的变量相加。
+        static final int SHARED_UNIT    = (1 << SHARED_SHIFT);          // 10000000000000000        位移运算空位都以0补齐
         static final int MAX_COUNT      = (1 << SHARED_SHIFT) - 1;
-        static final int EXCLUSIVE_MASK = (1 << SHARED_SHIFT) - 1;
+        static final int EXCLUSIVE_MASK = (1 << SHARED_SHIFT) - 1;      //  1111111111111111
 
+        // 将state拆分为两半，低16位用来记录写锁，高16位用来记录读锁。
+        // Why？
+        // 优点一：无法使用CAS同时操作两个int变量，因此用一个int变量来表示两个。
+        // 优点二：当state=0，既没有读锁也没有写锁。当state!=0，有么有线程持有读锁，要么有线程持有写锁，读写锁不能同时持有，因为互斥。
+        // 再通过sharedCount和exclusiveCount进一步判断，到底是读线程还是写线程。
         /** Returns the number of shared holds represented in count  */
-        static int sharedCount(int c)    { return c >>> SHARED_SHIFT; }
+        static int sharedCount(int c)    {
+            return c >>> SHARED_SHIFT;      //  无符号右移，忽略符号位，空位都以0补齐
+        }     // 持有读锁的线程的重入次数
         /** Returns the number of exclusive holds represented in count  */
-        static int exclusiveCount(int c) { return c & EXCLUSIVE_MASK; }
+        static int exclusiveCount(int c) { return c & EXCLUSIVE_MASK; }     // 持有写锁的线程的重入次数
 
         /**
          * A counter for per-thread read hold counts.
@@ -402,19 +411,24 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
          * Conditions. So it is possible that their arguments contain
          * both read and write holds that are all released during a
          * condition wait and re-established in tryAcquire.
+         *
+         * 释放写锁。
          */
-
         protected final boolean tryRelease(int releases) {
-            if (!isHeldExclusively())
+            if (!isHeldExclusively())       // 是否是当前线程持有锁
                 throw new IllegalMonitorStateException();
-            int nextc = getState() - releases;
-            boolean free = exclusiveCount(nextc) == 0;
+            int nextc = getState() - releases;              // 计算要释放重入的次数
+            boolean free = exclusiveCount(nextc) == 0;      // 写锁重入此时为0，表示已经完全不需要锁了
             if (free)
                 setExclusiveOwnerThread(null);
             setState(nextc);
             return free;
         }
-        //获取独占锁
+
+
+        /**
+         * 获取独占锁
+         */
         protected final boolean tryAcquire(int acquires) {
             /*
              * Walkthrough:
@@ -429,24 +443,30 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
              */
             Thread current = Thread.currentThread();
             int c = getState();
-            int w = exclusiveCount(c);//获取持有写锁数量
-            if (c != 0) {
+            int w = exclusiveCount(c);      // 写锁重入次数（写线程互斥，但能重入）
+            if (c != 0) {       // 有读或写线程正持有锁
                 // (Note: if c != 0 and w == 0 then shared count != 0)
-                if (w == 0 || current != getExclusiveOwnerThread())
+                if (w == 0 || current != getExclusiveOwnerThread())     // 有读线程持有锁
                     return false;
-                if (w + exclusiveCount(acquires) > MAX_COUNT)//超出最大持有数，抛异常
+                // 走到这里，一定是写线程，并且还是当前线程持有锁
+                if (w + exclusiveCount(acquires) > MAX_COUNT)           // 16位用满了，超过最大重入次数65535（一般不可能，上下文切换就能把性能指标搞死）
                     throw new Error("Maximum lock count exceeded");
                 // Reentrant acquire
-                setState(c + acquires);//更新state
+                setState(c + acquires);     // 经过上述验证，是当前线程持有锁
                 return true;
             }
-            if (writerShouldBlock() || //写锁是否需要阻塞
+            // 当前既没有读线程也没有写线程持有锁，直接开抢（开饭了！！！）
+            if (writerShouldBlock() || // 根据公平或非公平锁实现，判断当前写线程是否需要阻塞
                 !compareAndSetState(c, c + acquires))
                 return false;
-            setExclusiveOwnerThread(current);
+            // 锁获取成功
+            setExclusiveOwnerThread(current);       // 标记持有锁的线程是当前线程
             return true;
         }
-        //释放读锁
+
+        /**
+         * 释放读锁
+         */
         protected final boolean tryReleaseShared(int unused) {
             Thread current = Thread.currentThread();
             if (firstReader == current) {//当前为第一个获取读锁的线程
@@ -468,9 +488,9 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
                 }
                 --rh.count;
             }
-            for (;;) {//自旋
+            for (;;) {      // 读锁存在多个线程同时持有的情况，因此需要通过自旋+CAS来实现修改state
                 int c = getState();
-                int nextc = c - SHARED_UNIT;//获取剩余资源/锁
+                int nextc = c - SHARED_UNIT;        // 获取剩余资源/锁
                 if (compareAndSetState(c, nextc))
                     // Releasing the read lock has no effect on readers,
                     // but it may allow waiting writers to proceed if
@@ -484,6 +504,9 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
                 "attempt to unlock read lock, not locked by current thread");
         }
 
+        /**
+         * 获取读锁
+         */
         protected final int tryAcquireShared(int unused) {
             /*
              * Walkthrough:
@@ -500,34 +523,34 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
              *    apparently not eligible or CAS fails or count
              *    saturated, chain to version with full retry loop.
              */
-            //获取当前线程
             Thread current = Thread.currentThread();
             int c = getState();
-            //持有写锁的线程可以获取读锁，如果获取锁的线程不是current线程；则返回-1。
-            if (exclusiveCount(c) != 0 &&
-                getExclusiveOwnerThread() != current)
-                return -1;
-            int r = sharedCount(c);//获取读锁数量
-            if (!readerShouldBlock() &&
+            if (exclusiveCount(c) != 0 &&       // 写锁被持有
+                getExclusiveOwnerThread() != current)       // 并且还不是当前线程，那一定是拿不到锁的
+                return -1;      // 返回-1，表示获取锁失败
+            // 当前线程获取到了写锁 或 当前或其它线程获取到了读锁
+            int r = sharedCount(c);     // 读锁重入次数
+            if (!readerShouldBlock() &&     // 是否公平锁
                 r < MAX_COUNT &&
-                compareAndSetState(c, c + SHARED_UNIT)) {
-                if (r == 0) {//首次获取读锁,初始化firstReader和firstReaderHoldCount
+                compareAndSetState(c, c + SHARED_UNIT)      // 直接尝试获取读锁
+            ) {
+                if (r == 0) {       // 当前线程是第一个拿到读锁的线程
                     firstReader = current;
                     firstReaderHoldCount = 1;
-                } else if (firstReader == current) {//当前线程是首个获取读锁的线程
-                    firstReaderHoldCount++;
-                } else {
-                    //更新cachedHoldCounter
+                } else if (firstReader == current) {    // 持有锁的是当前线程
+                    firstReaderHoldCount++;             // 直接重入
+                } else {        // 不是第一个
+                    // 更新cachedHoldCounter
                     HoldCounter rh = cachedHoldCounter;
                     if (rh == null || rh.tid != getThreadId(current))
                         cachedHoldCounter = rh = readHolds.get();
                     else if (rh.count == 0)
                         readHolds.set(rh);
-                    rh.count++;//更新获取的读锁数量
+                    rh.count++;     // 更新获取的读锁数量
                 }
                 return 1;
             }
-            return fullTryAcquireShared(current);
+            return fullTryAcquireShared(current);       // 拿锁失败，进入自旋获取读锁
         }
 
         /**
@@ -712,13 +735,23 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
 
     /**
      * Nonfair version of Sync
+     *
+     * 写线程能抢锁
+     *      要求state=0    ——只有在没有其它线程持有读或写锁情况下，才有机会抢锁
+     *      要求state!=0  ——但要求那个持有锁的线程是自己，进行锁重入
+     * 综上，writerShouldBlock始终返回false，不管三七二十一，直接抢锁
+     *
+     *
+     * 对于读线程不能直接抢锁
+     *      因为读线程和读线程之间不是互斥的，读线程之间可以连续持有锁，中间没有释放锁的间隙，会导致写线程永远获取不到锁
+     *
      */
     static final class NonfairSync extends Sync {
         private static final long serialVersionUID = -8159625535654395037L;
-        final boolean writerShouldBlock() {
-            return false; // writers can always barge
+        final boolean writerShouldBlock() {     // 写线程抢锁的时候是否应该阻塞
+            return false; // writers can always barge       写线程抢锁之前永远不会被阻塞，非公平      ——写线程比读线程具有更高的优先级
         }
-        final boolean readerShouldBlock() {
+        final boolean readerShouldBlock() {     // 读线程抢锁的时候是否应该阻塞
             /* As a heuristic to avoid indefinite writer starvation,
              * block if the thread that momentarily appears to be head
              * of queue, if one exists, is a waiting writer.  This is
@@ -726,20 +759,22 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
              * block if there is a waiting writer behind other enabled
              * readers that have not yet drained from the queue.
              */
-            return apparentlyFirstQueuedIsExclusive();
+            return apparentlyFirstQueuedIsExclusive();      // 读线程抢锁的时候，队列中第一个元素是写线程时，要进入队列尾阻塞
         }
     }
 
     /**
      * Fair version of Sync
+     *
+     * 只要队列中有其它线程还在排队，就不能抢锁，要排在队列尾部
      */
     static final class FairSync extends Sync {
         private static final long serialVersionUID = -2274990926593161451L;
-        final boolean writerShouldBlock() {
-            return hasQueuedPredecessors();
+        final boolean writerShouldBlock() {     // 写线程抢锁的时候是否应该阻塞
+            return hasQueuedPredecessors();     // 写线程抢锁，队列中有其它线程在排队，就阻塞  ——公平锁
         }
-        final boolean readerShouldBlock() {
-            return hasQueuedPredecessors();
+        final boolean readerShouldBlock() {     // 读线程抢锁的时候是否应该阻塞
+            return hasQueuedPredecessors();     // 读线程抢锁，队列中有其它线程在排队，就阻塞  ——公平锁
         }
     }
 
@@ -929,8 +964,9 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
         }
 
         /**
-         * Throws {@code UnsupportedOperationException} because
-         * {@code ReadLocks} do not support conditions.
+         * Throws {@code UnsupportedOperationException} because {@code ReadLocks} do not support conditions.
+         *
+         * 读锁不支持Condition。
          *
          * @throws UnsupportedOperationException always
          */
@@ -947,8 +983,7 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
          */
         public String toString() {
             int r = sync.getReadLockCount();
-            return super.toString() +
-                "[Read locks = " + r + "]";
+            return super.toString() + "[Read locks = " + r + "]";
         }
     }
 
@@ -972,10 +1007,7 @@ public class ReentrantReadWriteLock extends lmmarise.util.concurrent.locks.Abstr
         /**
          * Acquires the write lock.
          *
-         * <p>Acquires the write lock if neither the read nor write lock
-         * are held by another thread
-         * and returns immediately, setting the write lock hold count to
-         * one.
+         * <p>Acquires the write lock if neither the read nor write lock are held by another thread and returns immediately, setting the write lock hold count to one.
          *
          * <p>If the current thread already holds the write lock then the
          * hold count is incremented by one and the method returns
