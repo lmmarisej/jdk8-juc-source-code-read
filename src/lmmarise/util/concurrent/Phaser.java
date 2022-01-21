@@ -432,18 +432,18 @@ public class Phaser {
                     int nextUnarrived = (int)n >>> PARTIES_SHIFT;
                     if (root == this) {
                         if (onAdvance(phase, nextUnarrived))//检查是否需要终止phaser
-                            n |= TERMINATION_BIT;
+                            n |= TERMINATION_BIT;       // 最高位置为1
                         else if (nextUnarrived == 0)
                             n |= EMPTY;
                         else
-                            n |= nextUnarrived;
+                            n |= nextUnarrived;     // 下一轮的未到达数等于总的线程个数
                         int nextPhase = (phase + 1) & MAX_PHASE;
                         n |= (long)nextPhase << PHASE_SHIFT;
                         UNSAFE.compareAndSwapLong(this, stateOffset, s, n);
                         releaseWaiters(phase);//释放等待phase的线程
                     }
                     //分层结构，使用父节点管理arrive
-                    else if (nextUnarrived == 0) { //propagate deregistration
+                    else if (nextUnarrived == 0) { //propagate deregistration   总的线程到达
                         phase = parent.doArrive(ONE_DEREGISTER);
                         UNSAFE.compareAndSwapLong(this, stateOffset,
                                                   s, s | EMPTY);
@@ -675,9 +675,8 @@ public class Phaser {
      * @throws IllegalStateException if not terminated and the number
      * of unarrived parties would become negative
      */
-    //使当前线程到达phaser，不等待其他任务到达。返回arrival phase number
     public int arrive() {
-        return doArrive(ONE_ARRIVAL);
+        return doArrive(ONE_ARRIVAL);       // 将未到达线程数减一
     }
 
     /**
@@ -696,9 +695,8 @@ public class Phaser {
      * @throws IllegalStateException if not terminated and the number
      * of registered or unarrived parties would become negative
      */
-    //使当前线程到达phaser并撤销注册，返回arrival phase number
     public int arriveAndDeregister() {
-        return doArrive(ONE_DEREGISTER);
+        return doArrive(ONE_DEREGISTER);        // 将未到达线程数和下一轮的总线程数减一
     }
 
     /**
@@ -777,7 +775,7 @@ public class Phaser {
         final Phaser root = this.root;
         long s = (root == this) ? state : reconcileState();
         int p = (int)(s >>> PHASE_SHIFT);
-        if (phase < 0)
+        if (phase < 0)      // 已经结束，不用阻塞，直接返回
             return phase;
         if (p == phase)
             return root.internalAwaitAdvance(phase, null);

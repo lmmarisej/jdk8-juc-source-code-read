@@ -164,9 +164,9 @@ public abstract class CyclicBarrier{
     /** The lock for guarding barrier entry */
     private final ReentrantLock lock = new ReentrantLock();
     /** Condition to wait on until tripped */
-    private final Condition trip = lock.newCondition();
+    private final Condition trip = lock.newCondition();     // 用于线程之间互相唤醒
     /** The number of parties */
-    private final int parties;
+    private final int parties;      // 总线程数
     /* The command to run when tripped */
     //所有线程到达barrier，运行barrierCommand
     private final Runnable barrierCommand;
@@ -220,34 +220,35 @@ public abstract class CyclicBarrier{
             if (g.broken)
                 throw new lmmarise.util.concurrent.BrokenBarrierException();
 
-            if (Thread.interrupted()) {
-                breakBarrier();//线程被中断，终止Barrier，唤醒所有等待线程
+            if (Thread.interrupted()) {     // 响应中断
+                breakBarrier();             //线程被中断，终止Barrier，唤醒所有等待线程
                 throw new InterruptedException();
             }
 
             int index = --count;
-            if (index == 0) {  // tripped
+            if (index == 0) {  // tripped       当count为0，此线程唤醒其它所有线程
+                // 进入这里的，都是在当前阶段最后到达的线程
                 boolean ranAction = false;
                 try {
                     final Runnable command = barrierCommand;
                     if (command != null)
-                        command.run();//如果有barrierCommand，在所有parties到达之后运行它
+                        command.run();// 如果有barrierCommand，在所有parties到达之后运行它
                     ranAction = true;
-                    //更新barrier状态并唤醒所有线程
+                    // 唤醒所有线程，将barrier值复原
                     nextGeneration();
                     return 0;
                 } finally {
                     if (!ranAction)
-                        breakBarrier();
+                        breakBarrier();     // 清除标志，以让在当前阶段阻塞的所有线程可以进入下一个阶段
                 }
             }
 
             // loop until tripped, broken, interrupted, or timed out
-            //自旋等待 所有parties到达 | generation被销毁 | 线程中断 | 超时
+            // 当count》0说明其他人没到齐，阻塞自己 | generation被销毁 | 线程中断 | 超时
             for (;;) {
                 try {
                     if (!timed)
-                        trip.await();
+                        trip.await();       // 阻塞自己，但是释放了锁，会让其它线程拿到锁，执行count--
                     else if (nanos > 0L)
                         nanos = trip.awaitNanos(nanos);
                 } catch (InterruptedException ie) {
@@ -265,7 +266,7 @@ public abstract class CyclicBarrier{
                 if (g.broken)
                     throw new lmmarise.util.concurrent.BrokenBarrierException();
 
-                if (g != generation)
+                if (g != generation)        // 从阻塞中唤醒，返回
                     return index;
 
                 if (timed && nanos <= 0L) {

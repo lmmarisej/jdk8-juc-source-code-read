@@ -50,7 +50,7 @@ package lmmarise.util.concurrent;
  * to swap buffers between threads so that the thread filling the
  * buffer gets a freshly emptied one when it needs it, handing off the
  * filled one to the thread emptying the buffer.
- *  <pre> {@code
+ * <pre> {@code
  * class FillAndEmpty {
  *   Exchanger<DataBuffer> exchanger = new Exchanger<DataBuffer>();
  *   DataBuffer initialEmptyBuffer = ... a made-up type
@@ -95,9 +95,9 @@ package lmmarise.util.concurrent;
  * those subsequent to a return from the corresponding {@code exchange()}
  * in the other thread.
  *
- * @since 1.5
- * @author Doug Lea and Bill Scherer and Michael Scott
  * @param <V> The type of objects that may be exchanged
+ * @author Doug Lea and Bill Scherer and Michael Scott
+ * @since 1.5
  */
 public class Exchanger<V> {
 
@@ -271,7 +271,9 @@ public class Exchanger<V> {
      */
     private static final int SEQ = MMASK + 1;
 
-    /** The number of CPUs, for sizing and spin control */
+    /**
+     * The number of CPUs, for sizing and spin control
+     */
     private static final int NCPU = Runtime.getRuntime().availableProcessors();
 
     /**
@@ -307,7 +309,8 @@ public class Exchanger<V> {
      * bookkeeping. Padded via @sun.misc.Contended to reduce memory
      * contention.
      */
-    @sun.misc.Contended static final class Node {
+    @sun.misc.Contended     // 缓存行填充
+    static final class Node {       // 每个线程在调用exchange交换数据时，先创建一个node对象，对该线程交换的数据+线程本身进行封装
         int index;              // Arena index
         int bound;              // Last recorded value of Exchanger.bound
         int collides;           // Number of CAS failures at current bound
@@ -317,9 +320,13 @@ public class Exchanger<V> {
         volatile Thread parked; // Set to this thread when parked, else null
     }
 
-    /** The corresponding thread local class */
+    /**
+     * The corresponding thread local class
+     */
     static final class Participant extends ThreadLocal<Node> {
-        public Node initialValue() { return new Node(); }
+        public Node initialValue() {
+            return new Node();
+        }
     }
 
     /**
@@ -331,7 +338,7 @@ public class Exchanger<V> {
      * Elimination array; null until enabled (within slotExchange).
      * Element accesses use emulation of volatile gets and CAS.
      */
-    private volatile Node[] arena;
+    private volatile Node[] arena;      // 一个slot只能支持两个线程之间交换数据，如果要实现多个线程并行地交换数据，需要多个slot。
 
     /**
      * Slot used until contention detected.
@@ -349,18 +356,19 @@ public class Exchanger<V> {
     /**
      * Exchange function when arenas enabled. See above for explanation.
      *
-     * @param item the (non-null) item to exchange
+     * @param item  the (non-null) item to exchange
      * @param timed true if the wait is timed
-     * @param ns if timed, the maximum wait time, else 0L
+     * @param ns    if timed, the maximum wait time, else 0L
      * @return the other thread's item; or null if interrupted; or
      * TIMED_OUT if timed and timed out
      */
     private final Object arenaExchange(Object item, boolean timed, long ns) {
         Node[] a = arena;
         Node p = participant.get();
-        for (int i = p.index;;) {                      // access slot at i
-            int b, m, c; long j;                       // j is raw array offset
-            Node q = (Node)U.getObjectVolatile(a, j = (i << ASHIFT) + ABASE);
+        for (int i = p.index; ; ) {                      // access slot at i
+            int b, m, c;
+            long j;                       // j is raw array offset
+            Node q = (Node) U.getObjectVolatile(a, j = (i << ASHIFT) + ABASE);
             if (q != null && U.compareAndSwapObject(a, j, q, null)) {
                 Object v = q.item;                     // release
                 q.match = item;
@@ -368,42 +376,40 @@ public class Exchanger<V> {
                 if (w != null)
                     U.unpark(w);
                 return v;
-            }
-            else if (i <= (m = (b = bound) & MMASK) && q == null) {
+            } else if (i <= (m = (b = bound) & MMASK) && q == null) {
                 p.item = item;                         // offer
                 if (U.compareAndSwapObject(a, j, null, p)) {
                     long end = (timed && m == 0) ? System.nanoTime() + ns : 0L;
                     Thread t = Thread.currentThread(); // wait
-                    for (int h = p.hash, spins = SPINS;;) {
+                    for (int h = p.hash, spins = SPINS; ; ) {
                         Object v = p.match;
                         if (v != null) {
                             U.putOrderedObject(p, MATCH, null);
                             p.item = null;             // clear for next use
                             p.hash = h;
                             return v;
-                        }
-                        else if (spins > 0) {
-                            h ^= h << 1; h ^= h >>> 3; h ^= h << 10; // xorshift
+                        } else if (spins > 0) {
+                            h ^= h << 1;
+                            h ^= h >>> 3;
+                            h ^= h << 10; // xorshift
                             if (h == 0)                // initialize hash
-                                h = SPINS | (int)t.getId();
+                                h = SPINS | (int) t.getId();
                             else if (h < 0 &&          // approx 50% true
-                                     (--spins & ((SPINS >>> 1) - 1)) == 0)
+                                    (--spins & ((SPINS >>> 1) - 1)) == 0)
                                 Thread.yield();        // two yields per wait
-                        }
-                        else if (U.getObjectVolatile(a, j) != p)
+                        } else if (U.getObjectVolatile(a, j) != p)
                             spins = SPINS;       // releaser hasn't set match yet
                         else if (!t.isInterrupted() && m == 0 &&
-                                 (!timed ||
-                                  (ns = end - System.nanoTime()) > 0L)) {
+                                (!timed ||
+                                        (ns = end - System.nanoTime()) > 0L)) {
                             U.putObject(t, BLOCKER, this); // emulate LockSupport
                             p.parked = t;              // minimize window
                             if (U.getObjectVolatile(a, j) == p)
                                 U.park(false, ns);
                             p.parked = null;
                             U.putObject(t, BLOCKER, null);
-                        }
-                        else if (U.getObjectVolatile(a, j) == p &&
-                                 U.compareAndSwapObject(a, j, p, null)) {
+                        } else if (U.getObjectVolatile(a, j) == p &&
+                                U.compareAndSwapObject(a, j, p, null)) {
                             if (m != 0)                // try to shrink
                                 U.compareAndSwapInt(this, BOUND, b, b + SEQ - 1);
                             p.item = null;
@@ -416,22 +422,18 @@ public class Exchanger<V> {
                             break;                     // expired; restart
                         }
                     }
-                }
-                else
+                } else
                     p.item = null;                     // clear offer
-            }
-            else {
+            } else {
                 if (p.bound != b) {                    // stale; reset
                     p.bound = b;
                     p.collides = 0;
                     i = (i != m || m == 0) ? m : m - 1;
-                }
-                else if ((c = p.collides) < m || m == FULL ||
-                         !U.compareAndSwapInt(this, BOUND, b, b + SEQ + 1)) {
+                } else if ((c = p.collides) < m || m == FULL ||
+                        !U.compareAndSwapInt(this, BOUND, b, b + SEQ + 1)) {
                     p.collides = c + 1;
                     i = (i == 0) ? m : i - 1;          // cyclically traverse
-                }
-                else
+                } else
                     i = m + 1;                         // grow
                 p.index = i;
             }
@@ -441,9 +443,9 @@ public class Exchanger<V> {
     /**
      * Exchange function used until arenas enabled. See above for explanation.
      *
-     * @param item the item to exchange
+     * @param item  the item to exchange
      * @param timed true if the wait is timed
-     * @param ns if timed, the maximum wait time, else 0L
+     * @param ns    if timed, the maximum wait time, else 0L
      * @return the other thread's item; or null if either the arena
      * was enabled or the thread was interrupted before completion; or
      * TIMED_OUT if timed and timed out
@@ -454,7 +456,7 @@ public class Exchanger<V> {
         if (t.isInterrupted()) // preserve interrupt status so caller can recheck
             return null;
 
-        for (Node q;;) {
+        for (Node q; ; ) {
             if ((q = slot) != null) {
                 if (U.compareAndSwapObject(this, SLOT, q, null)) {
                     Object v = q.item;
@@ -466,10 +468,9 @@ public class Exchanger<V> {
                 }
                 // create arena on contention, but continue until slot null
                 if (NCPU > 1 && bound == 0 &&
-                    U.compareAndSwapInt(this, BOUND, 0, SEQ))
+                        U.compareAndSwapInt(this, BOUND, 0, SEQ))
                     arena = new Node[(FULL + 2) << ASHIFT];
-            }
-            else if (arena != null)
+            } else if (arena != null)
                 return null; // caller must reroute to arenaExchange
             else {
                 p.item = item;
@@ -486,24 +487,24 @@ public class Exchanger<V> {
         Object v;
         while ((v = p.match) == null) {
             if (spins > 0) {
-                h ^= h << 1; h ^= h >>> 3; h ^= h << 10;
+                h ^= h << 1;
+                h ^= h >>> 3;
+                h ^= h << 10;
                 if (h == 0)
-                    h = SPINS | (int)t.getId();
+                    h = SPINS | (int) t.getId();
                 else if (h < 0 && (--spins & ((SPINS >>> 1) - 1)) == 0)
                     Thread.yield();
-            }
-            else if (slot != p)
+            } else if (slot != p)
                 spins = SPINS;
             else if (!t.isInterrupted() && arena == null &&
-                     (!timed || (ns = end - System.nanoTime()) > 0L)) {
+                    (!timed || (ns = end - System.nanoTime()) > 0L)) {
                 U.putObject(t, BLOCKER, this);
                 p.parked = t;
                 if (slot == p)
                     U.park(false, ns);
                 p.parked = null;
                 U.putObject(t, BLOCKER, null);
-            }
-            else if (U.compareAndSwapObject(this, SLOT, p, null)) {
+            } else if (U.compareAndSwapObject(this, SLOT, p, null)) {
                 v = timed && ns <= 0L && !t.isInterrupted() ? TIMED_OUT : null;
                 break;
             }
@@ -552,18 +553,20 @@ public class Exchanger<V> {
      * @param x the object to exchange
      * @return the object provided by the other thread
      * @throws InterruptedException if the current thread was
-     *         interrupted while waiting
+     *                              interrupted while waiting
+     *
+     * 返回从对方线程得到的item。
      */
     @SuppressWarnings("unchecked")
     public V exchange(V x) throws InterruptedException {
         Object v;
         Object item = (x == null) ? NULL_ITEM : x; // translate null args
         if ((arena != null ||
-             (v = slotExchange(item, false, 0L)) == null) &&
-            ((Thread.interrupted() || // disambiguates null return
-              (v = arenaExchange(item, false, 0L)) == null)))
+                (v = slotExchange(item, false, 0L)) == null) &&
+                ((Thread.interrupted() || // disambiguates null return
+                        (v = arenaExchange(item, false, 0L)) == null)))
             throw new InterruptedException();
-        return (v == NULL_ITEM) ? null : (V)v;
+        return (v == NULL_ITEM) ? null : (V) v;
     }
 
     /**
@@ -599,29 +602,29 @@ public class Exchanger<V> {
      * lmmarise.util.concurrent.TimeoutException} is thrown.  If the time is less than or equal
      * to zero, the method will not wait at all.
      *
-     * @param x the object to exchange
+     * @param x       the object to exchange
      * @param timeout the maximum time to wait
-     * @param unit the time unit of the {@code timeout} argument
+     * @param unit    the time unit of the {@code timeout} argument
      * @return the object provided by the other thread
-     * @throws InterruptedException if the current thread was
-     *         interrupted while waiting
+     * @throws InterruptedException                      if the current thread was
+     *                                                   interrupted while waiting
      * @throws lmmarise.util.concurrent.TimeoutException if the specified waiting time elapses
-     *         before another thread enters the exchange
+     *                                                   before another thread enters the exchange
      */
     @SuppressWarnings("unchecked")
     public V exchange(V x, long timeout, TimeUnit unit)
-        throws InterruptedException, lmmarise.util.concurrent.TimeoutException {
+            throws InterruptedException, lmmarise.util.concurrent.TimeoutException {
         Object v;
         Object item = (x == null) ? NULL_ITEM : x;
         long ns = unit.toNanos(timeout);
         if ((arena != null ||
-             (v = slotExchange(item, true, ns)) == null) &&
-            ((Thread.interrupted() ||
-              (v = arenaExchange(item, true, ns)) == null)))
+                (v = slotExchange(item, true, ns)) == null) &&
+                ((Thread.interrupted() ||
+                        (v = arenaExchange(item, true, ns)) == null)))
             throw new InterruptedException();
         if (v == TIMED_OUT)
             throw new TimeoutException();
-        return (v == NULL_ITEM) ? null : (V)v;
+        return (v == NULL_ITEM) ? null : (V) v;
     }
 
     // Unsafe mechanics
@@ -631,6 +634,7 @@ public class Exchanger<V> {
     private static final long MATCH;
     private static final long BLOCKER;
     private static final int ABASE;
+
     static {
         int s;
         try {
@@ -640,13 +644,13 @@ public class Exchanger<V> {
             Class<?> ak = Node[].class;
             Class<?> tk = Thread.class;
             BOUND = U.objectFieldOffset
-                (ek.getDeclaredField("bound"));
+                    (ek.getDeclaredField("bound"));
             SLOT = U.objectFieldOffset
-                (ek.getDeclaredField("slot"));
+                    (ek.getDeclaredField("slot"));
             MATCH = U.objectFieldOffset
-                (nk.getDeclaredField("match"));
+                    (nk.getDeclaredField("match"));
             BLOCKER = U.objectFieldOffset
-                (tk.getDeclaredField("parkBlocker"));
+                    (tk.getDeclaredField("parkBlocker"));
             s = U.arrayIndexScale(ak);
             // ABASE absorbs padding in front of element 0
             ABASE = U.arrayBaseOffset(ak) + (1 << ASHIFT);
@@ -654,7 +658,7 @@ public class Exchanger<V> {
         } catch (Exception e) {
             throw new Error(e);
         }
-        if ((s & (s-1)) != 0 || s > (1 << ASHIFT))
+        if ((s & (s - 1)) != 0 || s > (1 << ASHIFT))
             throw new Error("Unsupported array scale");
     }
 
