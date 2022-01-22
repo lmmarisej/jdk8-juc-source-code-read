@@ -176,6 +176,8 @@ import java.util.Date;
  *
  * @since 1.5
  * @author Doug Lea
+ *
+ * 模拟wait/notify
  */
 public interface Condition {
 

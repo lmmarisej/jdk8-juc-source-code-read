@@ -91,20 +91,16 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     private static final long serialVersionUID = -817911632652898426L;
 
     /** The queued items */
-    //存储元素的数组
     final Object[] items;
 
     /** items index for next take, poll, peek or remove */
-    //出列索引
     int takeIndex;
 
     /** items index for next put, offer, or add */
-    //入列索引
     int putIndex;
 
     /** Number of elements in the queue */
-    //元素数
-    int count;
+    int count;      // 记录阻塞队列中元素个数，因为使用读写双指针循环对queue进行操作，操作到queue末端将指针移动到开头，因此需要一个变量记录queue的容量
 
     /*
      * Concurrency control uses the classic two-condition algorithm
@@ -114,13 +110,11 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     /** Main lock guarding all access */
     final ReentrantLock lock;
 
-    /** Condition for waiting takes */
-    //等待获取条件
-    private final Condition notEmpty;
+    /** Condition for waiting takes，为无法读取线程准备的的队列 */
+    private final Condition notEmpty;       // 存储着等queue不为空的线程
 
-    /** Condition for waiting puts */
-    //等待插入条件
-    private final Condition notFull;
+    /** Condition for waiting puts，为无法写入线程准备的的队列 */
+    private final Condition notFull;        // 存储着等queue不为满的线程
 
     /**
      * Shared state for currently active iterators, or null if there
@@ -160,8 +154,9 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
     /**
      * Inserts element at current put position, advances, and signals.
      * Call only when holding lock.
+     *
+     * 插入元素到队列尾部。
      */
-    /**插入元素到队列尾部*/
     private void enqueue(E x) {
         // assert lock.getHoldCount() == 1;
         // assert items[putIndex] == null;
@@ -170,7 +165,7 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
         if (++putIndex == items.length)
             putIndex = 0;
         count++;
-        notEmpty.signal();
+        notEmpty.signal();      // 通知非空条件
     }
 
     /**
@@ -354,15 +349,16 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
      *
      * @throws InterruptedException {@inheritDoc}
      * @throws NullPointerException {@inheritDoc}
+     *
+     * 添加元素到尾部,队列已满就一直等待可用
      */
-    /**添加元素到尾部,队列已满就一直等待可用*/
     public void put(E e) throws InterruptedException {
         checkNotNull(e);
         final ReentrantLock lock = this.lock;
-        lock.lockInterruptibly();
+        lock.lockInterruptibly();       // 线程安全
         try {
             while (count == items.length)
-                notFull.await();
+                notFull.await();        // 队列满了，将当前的写线程阻塞
             enqueue(e);
         } finally {
             lock.unlock();
@@ -376,8 +372,9 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
      *
      * @throws InterruptedException {@inheritDoc}
      * @throws NullPointerException {@inheritDoc}
+     *
+     * 添加元素到队列尾部,队列已满等待timeout后无空间返回false
      */
-    /**添加元素到队列尾部,队列已满等待timeout后无空间返回false*/
     public boolean offer(E e, long timeout, lmmarise.util.concurrent.TimeUnit unit)
         throws InterruptedException {
 
@@ -413,7 +410,7 @@ public class ArrayBlockingQueue<E> extends AbstractQueue<E>
         lock.lockInterruptibly();
         try {
             while (count == 0)
-                notEmpty.await();
+                notEmpty.await();       // 队列为空，等待队列有数据
             return dequeue();
         } finally {
             lock.unlock();

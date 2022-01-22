@@ -96,7 +96,7 @@ public class DelayQueue<E extends lmmarise.util.concurrent.Delayed> extends Abst
      * 除非其他线程在这期间变成leader。如果队列头被一个有着更快过期时间的元素替换掉，leader将会被设置为null而失效，
      * 并唤醒其他等待线程（不一定是当前leader线程）。所以等待线程在等待期间必须时刻准备获取或失去leader权限。
      */
-    private Thread leader = null;
+    private Thread leader = null;       // 记录正在处理最先过期元素的线程，单线程模式，保证顺序执行
 
     /**
      * Condition signalled when a newer element becomes available
@@ -149,11 +149,10 @@ public class DelayQueue<E extends lmmarise.util.concurrent.Delayed> extends Abst
         final ReentrantLock lock = this.lock;
         lock.lock();
         try {
-            //调用priorityQueue的offer出列
-            q.offer(e);
-            if (q.peek() == e) {
-                leader = null;
-                available.signal();
+            q.offer(e);     // 元素放入二叉堆
+            if (q.peek() == e) {        // 放入的元素在栈顶，正好是过期时间最小的
+                leader = null;          // 如果正在进行超时等待的线程比新加入的元素超时时间长，不将leader置为null，否则获取到新加入的最短超时节点将会在比他长的延时任务后才处理
+                available.signal();     // 唤醒可能正在等待的线程
             }
             return true;
         } finally {
@@ -214,39 +213,46 @@ public class DelayQueue<E extends lmmarise.util.concurrent.Delayed> extends Abst
      *
      * @return the head of this queue
      * @throws InterruptedException {@inheritDoc}
+     *
+     * 获取并移除头元素，没有元素到期一直等待元素可用
      */
-    /**获取并移除头元素，一直等待元素可用*/
+    @SuppressWarnings("all")
     public E take() throws InterruptedException {
         final ReentrantLock lock = this.lock;
         lock.lockInterruptibly();
         try {
             //自旋
             for (;;) {
-                E first = q.peek();
-                if (first == null)//首节点为空，等待
-                    available.await();
+                E first = q.peek();     // 探测二叉堆的堆顶元素，也就是延迟时间最小的
+                if (first == null)
+                    available.await();      // 队列为空，阻塞线程
                 else {
-                    long delay = first.getDelay(NANOSECONDS);//获取延时时间
+                    long delay = first.getDelay(NANOSECONDS);       // 判断获取到的元素是否到期
                     if (delay <= 0)
-                        return q.poll();
-                    //释放first的引用，避免内存泄漏
-                    first = null; // don't retain ref while waiting
-                    if (leader != null)//leader不为空，证明有其他线程已经获取到leader，加入条件队列等到延时结束
-                        available.await();
+                        return q.poll();        // 到期了，返回
+                    first = null; // don't retain ref while waiting     释放first的引用，避免内存泄漏【这里可能会等很久】
+                    // 元素没过期，阻塞当前线程，根据有无正在处理头结点的线程判断是超时阻塞或是无限阻塞
+                    if (leader != null)    // 有其它线程排在前面，当前线程不急着处理
+                        available.await();      // 释放锁，无限阻塞
                     else {
                         Thread thisThread = Thread.currentThread();
-                        leader = thisThread;//leader指向当前线程
+                        leader = thisThread;        // 让后来的线程无限阻塞
                         try {
-                            available.awaitNanos(delay);
+                            available.awaitNanos(delay);        // 这个最先过期的元素还有一段时间才过期，先等一段最小过期时间
+                            // 睡醒后，再通过peek去获取最小超时任务，相当于再检查一次
+                            // - 如果有新添加的已超时的延时任务，该任务会被优先返回。
+                            // - 如果有新添加的未超时的延时任务，会继续走到这里，任务被加入Condition队列。
+
+                            // 这里看起来是终点，其实只是起点，终点在return语句处
                         } finally {
-                            if (leader == thisThread)//检查是否被其他线程改变，没有就重置，再次循环
-                                leader = null;
+                            if (leader == thisThread)       // 检查是否被其他线程改变，没有就重置，再次循环
+                                leader = null;      // 保证当前线程可以继续超时阻塞
                         }
                     }
                 }
             }
         } finally {
-            if (leader == null && q.peek() != null)//leader为空并且队列不空，说明没有其他线程在等待，那就通知条件队列
+            if (leader == null && q.peek() != null)     // leader为空并且队列不空，说明没有其他线程在等待，那就通知条件队列
                 available.signal();
             lock.unlock();
         }

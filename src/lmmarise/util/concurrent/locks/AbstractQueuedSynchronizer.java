@@ -2186,6 +2186,8 @@ public abstract class AbstractQueuedSynchronizer
          *      {@link #acquire} with saved state as argument.
          * <li> If interrupted while blocked in step 4, throw InterruptedException.
          * </ol>
+         *
+         * 超时等待，在时间范围内等待node被唤醒并加入AQS，返回超时剩余时间
          */
         public final long awaitNanos(long nanosTimeout)
                 throws InterruptedException {

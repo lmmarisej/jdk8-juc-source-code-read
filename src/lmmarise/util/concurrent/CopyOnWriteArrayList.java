@@ -438,11 +438,11 @@ public class CopyOnWriteArrayList<E>
      */
     public boolean add(E e) {
         final ReentrantLock lock = this.lock;
-        lock.lock();//加锁
+        lock.lock();
         try {
             Object[] elements = getArray();
             int len = elements.length;
-            //新增元素追加到最后一个索引位
+            // 写的时候，拷贝一份之前的数据
             Object[] newElements = Arrays.copyOf(elements, len + 1);
             newElements[len] = e;
             setArray(newElements);

@@ -236,8 +236,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
      */
     static final long spinForTimeoutThreshold = 1000L;
 
-    /** Dual stack */
-    /**非公平模式，双重栈实现*/
+    /** Dual stack 单向链表，只需要一个head指针就能实现入站和出栈操作 */
     static final class TransferStack<E> extends Transferer<E> {
         /*
          * This extends Scherer-Scott dual stack algorithm, differing,
@@ -249,14 +248,11 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
 
         /* Modes for SNodes, ORed together in node fields */
         /** Node represents an unfulfilled consumer */
-        /** 消费者请求数据 */
-        static final int REQUEST    = 0;
+        static final int REQUEST    = 0;        // 对应take节点
         /** Node represents an unfulfilled producer */
-        /** 生产者生产数据 */
-        static final int DATA       = 1;
+        static final int DATA       = 1;        // 对应put节点
         /** Node is fulfilling another unfulfilled DATA or REQUEST */
-        /** 数据正在匹配其他生产者或消费者 */
-        static final int FULFILLING = 2;
+        static final int FULFILLING = 2;        // request和data对应后生成一个FULFILLING节点入栈，然后FULFILLING节点和被配对的节点一起出栈
 
         /** Returns true if m has fulfilling bit set. */
         static boolean isFulfilling(int m) { return (m & FULFILLING) != 0; }
@@ -418,10 +414,10 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
                         //head已经被匹配，修改head继续循环
                         casHead(h, h.next);         // pop and retry
 
-                    //构建新节点，放到栈顶
+                    // 构建新节点，放到栈顶
                     else if (casHead(h, s=snode(s, e, h, FULFILLING|mode))) {
                         for (;;) { // loop until matched or waiters disappear
-                            //cas成功后s的match节点就是s.next，即m
+                            // cas成功后s的match节点就是s.next，即m
                             SNode m = s.next;       // m is s's match
                             if (m == null) {        // all waiters are gone
                                 casHead(s, null);   // pop fulfill node
@@ -746,20 +742,12 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
              * null checks at top of loop, which is usually faster
              * than having them implicitly interspersed.
              *
-             * 1. 若队列为空或者队列中的尾节点和自己的模式相同, 则把当前节点添加到队列尾,
-             *    直到节点取消匹配或匹配成功，然后返回匹配节点的 item。
-             *
-             * 2. 如果队列中有一个互补的等待节点，尝试通过CAS修改等待节点的item字段为给定元素e，
-             *    然后使等待节点出列，并返回匹配节点的 item。
-             *
-             * 不管是上述哪种情况，都需要检查并帮助推进 head 和 tail。
-             *
-             * 循环从一个空检查开始，防止看到未初始化的head/tail值。在并发环境下，这种情况一般不会发生；
-             * 但是如果调用者持有了一个非volatile或非final引用，就会发生这种情况。
+             * 如果当前线程和队列中的元素是同一种模式，则与当前相册好难过对应的节点将被添加到队列尾部并阻；
+             * 如果不是同一种模式，则选取队列头部的第一个元素进行配对。
              */
 
             QNode s = null; // constructed/reused as needed
-            boolean isData = (e != null);//判断put or take
+            boolean isData = (e != null);       // 判断put or take
 
             for (;;) {
                 QNode t = tail;
@@ -769,7 +757,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
 
                 if (h == t || t.isData == isData) { // empty or same-mode
                     QNode tn = t.next;
-                    if (t != tail)                  // inconsistent read
+                    if (t != tail)                  // inconsistent read        不一致读，重新进入for循环
                         continue;
                     if (tn != null) {               //尾节点滞后，更新尾节点 lagging tail
                         advanceTail(t, tn);
@@ -777,45 +765,44 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
                     }
                     if (timed && nanos <= 0)        // can't wait
                         return null;
-                    //为当前操作构造新节点，并放到队尾
+                    // 为当前操作构造新节点，并放到队尾
                     if (s == null)
                         s = new QNode(e, isData);
                     if (!t.casNext(null, s))        // failed to link in
                         continue;
 
-                    //推进tail
-                    advanceTail(t, s);              // swing tail and wait
-                    //等待匹配，并返回匹配节点的item，如果取消等待则返回该节点s
-                    Object x = awaitFulfill(s, e, timed, nanos);
+                    advanceTail(t, s);              // swing tail and wait      后移tail指针
+                    // 等待匹配，并返回匹配节点的item，如果取消等待则返回该节点s
+                    Object x = awaitFulfill(s, e, timed, nanos);        // 进入阻塞状态
                     if (x == s) {                   // wait was cancelled
-                        clean(t, s); //等待被取消，清除s节点
+                        clean(t, s);        // 等待被取消，清除s节点
                         return null;
                     }
 
-                    if (!s.isOffList()) {           // s节点尚未出列 not already unlinked
+                    if (!s.isOffList()) {           // not already unlinked  从阻塞中唤醒，确定已经处于队列中第一个元素
                         advanceHead(t, s);          // unlink if head
                         if (x != null)              // and forget fields
-                            s.item = s;//item指向自身
+                            s.item = s;     // item指向自身
                         s.waiter = null;
                     }
                     return (x != null) ? (E)x : e;
 
                     //take
-                } else {                            // complementary-mode
-                    QNode m = h.next;               // node to fulfill
+                } else {                            // complementary-mode  当前线程可以和队列中第一个元素进行匹配
+                    QNode m = h.next;               // node to fulfill        队列中第一个元素
                     if (t != tail || m == null || h != head)
-                        continue;                   // inconsistent read
+                        continue;                   // inconsistent read        不一致读，重新循环
 
                     Object x = m.item;
-                    if (isData == (x != null) ||    // m already fulfilled
-                        x == m ||                   //m.item=m, m cancelled
-                        !m.casItem(x, e)) {         // 匹配，CAS修改item为给定元素e lost CAS
-                        advanceHead(h, m);          // 推进head，继续向后查找 dequeue and retry
+                    if (isData == (x != null) ||    // m already fulfilled    已经配对过
+                        x == m ||                   // m.item=m, m cancelled
+                        !m.casItem(x, e)) {         // 尝试配对
+                        advanceHead(h, m);          // 已经配对过，直接出队列
                         continue;
                     }
 
-                    advanceHead(h, m);              //匹配成功，head出列 successfully fulfilled
-                    LockSupport.unpark(m.waiter);   //唤醒被匹配节点m的线程
+                    advanceHead(h, m);              // 匹配成功，head出列 successfully fulfilled
+                    LockSupport.unpark(m.waiter);   // 唤醒队列中与第一个元素对应的线程
                     return (x != null) ? (E)x : e;
                 }
             }

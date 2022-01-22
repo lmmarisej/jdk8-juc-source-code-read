@@ -150,7 +150,7 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
      * heap and each descendant d of n, n <= d.  The element with the
      * lowest value is in queue[0], assuming the queue is nonempty.
      *
-     * 基于一个平衡的二元堆实现：子节点位置分别为2*n+1和2*(n+1)
+     * 基于一个平衡的二元堆实现：子节点位置分别为 2*n+1 和 2*(n+1)
      */
     private transient Object[] queue;
 
@@ -498,14 +498,12 @@ public class PriorityBlockingQueue<E> extends AbstractQueue<E>
         lock.lock();
         int n, cap;
         Object[] array;
-        while ((n = size) >= (cap = (array = queue).length))
-            //队列扩容
+        while ((n = size) >= (cap = (array = queue).length))        // size超出数组长度，扩容
             tryGrow(array, cap);
         try {
             Comparator<? super E> cmp = comparator;
-            //找到合适位置插入元素
             if (cmp == null)
-                siftUpComparable(n, e, array);
+                siftUpComparable(n, e, array);      // 元素入堆，使用元素自带的比较功能
             else
                 siftUpUsingComparator(n, e, array, cmp);
             size = n + 1;

@@ -1809,6 +1809,8 @@ public abstract class AbstractQueuedLongSynchronizer
          *      {@link #acquire} with saved state as argument.
          * <li> If interrupted while blocked in step 4, throw InterruptedException.
          * </ol>
+         *
+         * 当前线程节点未被唤醒并加入AQS之前，将被一直阻塞
          */
         public final void await() throws InterruptedException {
             if (Thread.interrupted())
@@ -1841,6 +1843,8 @@ public abstract class AbstractQueuedLongSynchronizer
          *      {@link #acquire} with saved state as argument.
          * <li> If interrupted while blocked in step 4, throw InterruptedException.
          * </ol>
+         *
+         * 加入AQS队列，或超时时间到就能返回，返回剩余等待时间
          */
         public final long awaitNanos(long nanosTimeout)
                 throws InterruptedException {
@@ -1856,7 +1860,7 @@ public abstract class AbstractQueuedLongSynchronizer
                     break;
                 }
                 if (nanosTimeout >= spinForTimeoutThreshold)
-                    lmmarise.util.concurrent.locks.LockSupport.parkNanos(this, nanosTimeout);
+                    lmmarise.util.concurrent.locks.LockSupport.parkNanos(this, nanosTimeout);       // 超时阻塞
                 if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
                     break;
                 nanosTimeout = deadline - System.nanoTime();

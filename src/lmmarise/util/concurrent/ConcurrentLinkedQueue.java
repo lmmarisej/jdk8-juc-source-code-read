@@ -377,8 +377,9 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
      *
      * @return {@code true} (as specified by {@link Queue#offer})
      * @throws NullPointerException if the specified element is null
+     *
+     * 添加节点到队列尾
      */
-    /**添加节点到队列尾*/
     public boolean offer(E e) {
         checkNotNull(e);
         final Node<E> newNode = new Node<E>(e);
@@ -387,7 +388,7 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
             Node<E> q = p.next;
             if (q == null) {//p为尾节点
                 // p is last node
-                if (p.casNext(null, newNode)) {//cas替换p的next节点为新节点
+                if (p.casNext(null, newNode)) {     // 对tail的next指针而不是对tail指针执行CAS操作
                     // Successful CAS is the linearization point
                     // for e to become an element of this queue,
                     // and for newNode to become "live".
@@ -397,7 +398,7 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
                 }
                 // Lost CAS race to another thread; re-read next
             }
-            else if (p == q)
+            else if (p == q)        // 到达队列尾部
                 // We have fallen off list.  If tail is unchanged, it
                 // will also be off-list, in which case we need to
                 // jump to head, from which all live nodes are always
@@ -406,7 +407,7 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
                 // 如果tail节点被其他线程修改，此时需要从head开始向后遍历，因为
                 // 从head可以到达所有的live节点。
                 p = (t != (t = tail)) ? t : head;
-            else
+            else        // 后移p指针
                 // Check for tail updates after two hops.
                 //继续向后查找，如果tail节点变化，重新获取tail
                 p = (p != t && t != (t = tail)) ? t : q;
@@ -420,7 +421,7 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
             for (Node<E> h = head, p = h, q;;) {
                 E item = p.item;
 
-                if (item != null && p.casItem(item, null)) {//找到第一个节点，cas修改节点item为null
+                if (item != null && p.casItem(item, null)) {        // 出队列没有移动head指针，而是找到第一个节点，cas修改节点item为null
                     // Successful CAS is the linearization point
                     // for item to be removed from this queue.
                     if (p != h) // 跳两个节点以上时才修改head
