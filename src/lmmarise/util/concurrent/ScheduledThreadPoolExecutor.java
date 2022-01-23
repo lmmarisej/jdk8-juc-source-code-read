@@ -34,19 +34,23 @@
  */
 
 package lmmarise.util.concurrent;
+import static TimeUnit.NANOSECONDS;
 import static lmmarise.util.concurrent.TimeUnit.NANOSECONDS;
 
+import atomic.AtomicLong;
 import lmmarise.util.concurrent.atomic.AtomicLong;
 import lmmarise.util.concurrent.locks.Condition;
 import lmmarise.util.concurrent.locks.ReentrantLock;
+import locks.Condition;
+import locks.ReentrantLock;
 import java.util.*;
 
 /**
- * A {@link lmmarise.util.concurrent.ThreadPoolExecutor} that can additionally schedule
+ * A {@link ThreadPoolExecutor} that can additionally schedule
  * commands to run after a given delay, or to execute
  * periodically. This class is preferable to {@link java.util.Timer}
  * when multiple worker threads are needed, or when the additional
- * flexibility or capabilities of {@link lmmarise.util.concurrent.ThreadPoolExecutor} (which
+ * flexibility or capabilities of {@link ThreadPoolExecutor} (which
  * this class extends) are required.
  *
  * <p>Delayed tasks execute no sooner than they are enabled, but
@@ -77,7 +81,7 @@ import java.util.*;
  * href="package-summary.html#MemoryVisibility"><i>happen-before</i></a>
  * those of subsequent ones.
  *
- * <p>While this class inherits from {@link lmmarise.util.concurrent.ThreadPoolExecutor}, a few
+ * <p>While this class inherits from {@link ThreadPoolExecutor}, a few
  * of the inherited tuning methods are not useful for it. In
  * particular, because it acts as a fixed-sized pool using
  * {@code corePoolSize} threads and an unbounded queue, adjustments
@@ -92,9 +96,9 @@ import java.util.*;
  *
  *
  * <p><b>Extension notes:</b> This class overrides the
- * {@link lmmarise.util.concurrent.ThreadPoolExecutor#execute(Runnable) execute} and
+ * {@link ThreadPoolExecutor#execute(Runnable) execute} and
  * {@link AbstractExecutorService#submit(Runnable) submit}
- * methods to generate internal {@link lmmarise.util.concurrent.ScheduledFuture} objects to
+ * methods to generate internal {@link ScheduledFuture} objects to
  * control per-task delays and scheduling.  To preserve
  * functionality, any further overrides of these methods in
  * subclasses must invoke superclass versions, which effectively
@@ -106,7 +110,7 @@ import java.util.*;
  * {@code submit}, {@code schedule}, {@code scheduleAtFixedRate},
  * and {@code scheduleWithFixedDelay}.  By default, a
  * {@code ScheduledThreadPoolExecutor} uses a task type extending
- * {@link lmmarise.util.concurrent.FutureTask}. However, this may be modified or replaced using
+ * {@link FutureTask}. However, this may be modified or replaced using
  * subclasses of the form:
  * STPE 重写了execute和submit方法，主要是用来把任务转化为STPE可以执行的ScheduledFuture任务类型，
  * 以此来控制每个任务的延迟和周期。为了保证功能的完整性，这些方法任何自定义重写函数都要调用父类的方法，
@@ -137,7 +141,7 @@ import java.util.*;
  * @author Doug Lea
  */
 public class ScheduledThreadPoolExecutor
-        extends lmmarise.util.concurrent.ThreadPoolExecutor
+        extends ThreadPoolExecutor
         implements ScheduledExecutorService {
 
     /*
@@ -209,15 +213,14 @@ public class ScheduledThreadPoolExecutor
 
     //周期任务
     private class ScheduledFutureTask<V>
-            extends FutureTask<V> implements lmmarise.util.concurrent.RunnableScheduledFuture<V> {
+            extends FutureTask<V> implements RunnableScheduledFuture<V> {
 
         /** Sequence number to break ties FIFO */
         //为相同延时任务提供的顺序编号
         private final long sequenceNumber;
 
         /** The time the task is enabled to execute in nanoTime units */
-        //任务可以执行的时间，纳秒级
-        private long time;
+        private long time;      // 任务下一次的执行的时间，纳秒级
 
         /**
          * Period in nanoseconds for repeating tasks.  A positive
@@ -225,12 +228,12 @@ public class ScheduledThreadPoolExecutor
          * indicates fixed-delay execution.  A value of 0 indicates a
          * non-repeating task.
          */
-        //重复任务的执行周期时间，纳秒级。正数表示固定速率执行，负数表示固定延迟执行，0表示不重复任务
+        //重复任务的执行周期时间，纳秒级。正数表示固定频率执行，负数表示固定间隔执行，0表示不重复任务
         private final long period;
 
         /** The actual task to be re-enqueued by reExecutePeriodic */
         //重新入队的任务
-        lmmarise.util.concurrent.RunnableScheduledFuture<V> outerTask = this;
+        RunnableScheduledFuture<V> outerTask = this;
 
         /**
          * Index into delay queue, to support faster cancellation.
@@ -264,18 +267,18 @@ public class ScheduledThreadPoolExecutor
          * Creates a one-shot action with given nanoTime-based trigger time.
          */
         //创建一个一次性执行的延时任务Callable
-        ScheduledFutureTask(lmmarise.util.concurrent.Callable<V> callable, long ns) {
+        ScheduledFutureTask(Callable<V> callable, long ns) {
             super(callable);
             this.time = ns;
             this.period = 0;
             this.sequenceNumber = sequencer.getAndIncrement();
         }
         //获取任务延迟时间
-        public long getDelay(lmmarise.util.concurrent.TimeUnit unit) {
+        public long getDelay(TimeUnit unit) {
             return unit.convert(time - now(), NANOSECONDS);
         }
         //任务排队顺序比较
-        public int compareTo(lmmarise.util.concurrent.Delayed other) {
+        public int compareTo(Delayed other) {
             if (other == this) // compare zero if same object
                 return 0;
             if (other instanceof ScheduledFutureTask) {
@@ -285,7 +288,7 @@ public class ScheduledThreadPoolExecutor
                     return -1;
                 else if (diff > 0)
                     return 1;
-                else if (sequenceNumber < x.sequenceNumber)
+                else if (sequenceNumber < x.sequenceNumber)     // 两个延迟时间相等，进一步比较序列号
                     return -1;
                 else
                     return 1;
@@ -310,10 +313,11 @@ public class ScheduledThreadPoolExecutor
         //设置下一次执行任务的时间
         private void setNextRunTime() {
             long p = period;
-            if (p > 0) //固定速率执行，scheduleAtFixedRate
+            if (p > 0)      // 固定频率执行，scheduleAtFixedRate，任务执行时间必须小于间隔时间
                 time += p;
             else
-                time = triggerTime(-p);//固定延迟执行，scheduleWithFixedDelay
+                // now + -p，now为上一次执行结束时间
+                time = triggerTime(-p);     // 固定间隔延迟执行，scheduleWithFixedDelay，与任务本身执行时间有关
         }
         //取消任务
         public boolean cancel(boolean mayInterruptIfRunning) {
@@ -331,11 +335,10 @@ public class ScheduledThreadPoolExecutor
             boolean periodic = isPeriodic();//是否为周期任务
             if (!canRunInCurrentRunState(periodic))//当前状态是否可以执行
                 cancel(false);
-            else if (!periodic)
-                //不是周期任务，直接执行
+            else if (!periodic)     // 不是周期任务，执行一次就结束
                 ScheduledFutureTask.super.run();
-            else if (ScheduledFutureTask.super.runAndReset()) {
-                setNextRunTime();//设置下一次运行时间
+            else if (ScheduledFutureTask.super.runAndReset()) {     // 周期性任务，重新设置下一次执行时间，丢回任务队列
+                setNextRunTime();//设置本任务下一次运行时间
                 reExecutePeriodic(outerTask);//重排序一个周期任务
             }
         }
@@ -370,11 +373,11 @@ public class ScheduledThreadPoolExecutor
      * 所以我们不能预先启动线程来运行任务）。如果在任务添加期间池被关闭，
      * 根据池状态和run-after-shutdown参数决定取消或移除任务。
      */
-    private void delayedExecute(lmmarise.util.concurrent.RunnableScheduledFuture<?> task) {
+    private void delayedExecute(RunnableScheduledFuture<?> task) {
         if (isShutdown())
             reject(task);//池已关闭，执行拒绝策略
         else {
-            super.getQueue().add(task);//任务入队
+            super.getQueue().add(task);     // 把任务加入延时队列
             if (isShutdown() &&
                 !canRunInCurrentRunState(task.isPeriodic()) &&//判断run-after-shutdown参数
                 remove(task))//移除任务
@@ -391,7 +394,7 @@ public class ScheduledThreadPoolExecutor
      * @param task the task
      */
     //重排序一个周期任务
-    void reExecutePeriodic(lmmarise.util.concurrent.RunnableScheduledFuture<?> task) {
+    void reExecutePeriodic(RunnableScheduledFuture<?> task) {
         if (canRunInCurrentRunState(true)) {//池关闭后可继续执行
             super.getQueue().add(task);//任务入列
             //重新检查run-after-shutdown参数，如果不能继续运行就移除队列任务，并取消任务的执行
@@ -408,7 +411,7 @@ public class ScheduledThreadPoolExecutor
      */
     //取消并清除由于关闭策略不应该运行的所有任务
     @Override void onShutdown() {
-        lmmarise.util.concurrent.BlockingQueue<Runnable> q = super.getQueue();
+        BlockingQueue<Runnable> q = super.getQueue();
         //获取run-after-shutdown参数
         boolean keepDelayed =
             getExecuteExistingDelayedTasksAfterShutdownPolicy();
@@ -417,17 +420,17 @@ public class ScheduledThreadPoolExecutor
         if (!keepDelayed && !keepPeriodic) {//池关闭后不保留任务
             //依次取消任务
             for (Object e : q.toArray())
-                if (e instanceof lmmarise.util.concurrent.RunnableScheduledFuture<?>)
-                    ((lmmarise.util.concurrent.RunnableScheduledFuture<?>) e).cancel(false);
+                if (e instanceof RunnableScheduledFuture<?>)
+                    ((RunnableScheduledFuture<?>) e).cancel(false);
             q.clear();//清除等待队列
         }
         else {//池关闭后保留任务
             // Traverse snapshot to avoid iterator exceptions
             //遍历快照以避免迭代器异常
             for (Object e : q.toArray()) {
-                if (e instanceof lmmarise.util.concurrent.RunnableScheduledFuture) {
-                    lmmarise.util.concurrent.RunnableScheduledFuture<?> t =
-                        (lmmarise.util.concurrent.RunnableScheduledFuture<?>)e;
+                if (e instanceof RunnableScheduledFuture) {
+                    RunnableScheduledFuture<?> t =
+                        (RunnableScheduledFuture<?>)e;
                     if ((t.isPeriodic() ? !keepPeriodic : !keepDelayed) ||
                         t.isCancelled()) { // also remove if already cancelled
                         //如果任务已经取消，移除队列中的任务
@@ -455,8 +458,8 @@ public class ScheduledThreadPoolExecutor
     /**
      * 修改或替换用于执行runnable的任务。此方法可被重写来管理内部任务。默认实现下返回给定task
      */
-    protected <V> lmmarise.util.concurrent.RunnableScheduledFuture<V> decorateTask(
-        Runnable runnable, lmmarise.util.concurrent.RunnableScheduledFuture<V> task) {
+    protected <V> RunnableScheduledFuture<V> decorateTask(
+        Runnable runnable, RunnableScheduledFuture<V> task) {
         return task;
     }
 
@@ -475,8 +478,8 @@ public class ScheduledThreadPoolExecutor
     /**
      * 修改或替换用于执行callable的任务。此方法可被重写来管理内部任务。默认实现返回给定task
      */
-    protected <V> lmmarise.util.concurrent.RunnableScheduledFuture<V> decorateTask(
-            lmmarise.util.concurrent.Callable<V> callable, lmmarise.util.concurrent.RunnableScheduledFuture<V> task) {
+    protected <V> RunnableScheduledFuture<V> decorateTask(
+            Callable<V> callable, RunnableScheduledFuture<V> task) {
         return task;
     }
 
@@ -505,7 +508,7 @@ public class ScheduledThreadPoolExecutor
      * @throws NullPointerException if {@code threadFactory} is null
      */
     public ScheduledThreadPoolExecutor(int corePoolSize,
-                                       lmmarise.util.concurrent.ThreadFactory threadFactory) {
+                                       ThreadFactory threadFactory) {
         super(corePoolSize, Integer.MAX_VALUE, 0, NANOSECONDS,
               new DelayedWorkQueue(), threadFactory);
     }
@@ -522,7 +525,7 @@ public class ScheduledThreadPoolExecutor
      * @throws NullPointerException if {@code handler} is null
      */
     public ScheduledThreadPoolExecutor(int corePoolSize,
-                                       lmmarise.util.concurrent.RejectedExecutionHandler handler) {
+                                       RejectedExecutionHandler handler) {
         super(corePoolSize, Integer.MAX_VALUE, 0, NANOSECONDS,
               new DelayedWorkQueue(), handler);
     }
@@ -552,7 +555,7 @@ public class ScheduledThreadPoolExecutor
      * Returns the trigger time of a delayed action.
      */
     //返回延迟任务的触发时间
-    private long triggerTime(long delay, lmmarise.util.concurrent.TimeUnit unit) {
+    private long triggerTime(long delay, TimeUnit unit) {
         return triggerTime(unit.toNanos((delay < 0) ? 0 : delay));
     }
 
@@ -577,7 +580,7 @@ public class ScheduledThreadPoolExecutor
      * 如果一个任务有资格但还没有出队，而另一个任务被添加延迟为Long.MAX_VALUE，则可能发生溢出情况
      */
     private long overflowFree(long delay) {
-        lmmarise.util.concurrent.Delayed head = (Delayed) super.getQueue().peek();
+        Delayed head = (Delayed) super.getQueue().peek();
         if (head != null) {
             long headDelay = head.getDelay(NANOSECONDS);
             if (headDelay < 0 && (delay - headDelay < 0))
@@ -587,37 +590,33 @@ public class ScheduledThreadPoolExecutor
     }
 
     /**
-     * @throws lmmarise.util.concurrent.RejectedExecutionException {@inheritDoc}
+     * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
-     */
-    /**
+     *
      * 创建并执行在给定延迟后启用的一次性操作
      */
-    public lmmarise.util.concurrent.ScheduledFuture<?> schedule(Runnable command,
-                                                                long delay,
-                                                                lmmarise.util.concurrent.TimeUnit unit) {
+    public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
         if (command == null || unit == null)
             throw new NullPointerException();
-        lmmarise.util.concurrent.RunnableScheduledFuture<?> t = decorateTask(command,
-            new ScheduledFutureTask<Void>(command, null,
-                                          triggerTime(delay, unit)));
+        // 将Runnable对象，包装成RunnableScheduledFuture对象
+        RunnableScheduledFuture<?> t = decorateTask(command,
+            new ScheduledFutureTask<Void>(command, null, triggerTime(delay, unit)));
         delayedExecute(t);
         return t;
     }
 
     /**
-     * @throws lmmarise.util.concurrent.RejectedExecutionException {@inheritDoc}
+     * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
-     */
-    /**
+     *
      * 创建并执行在给定延迟后启用的ScheduledFuture任务
      */
-    public <V> lmmarise.util.concurrent.ScheduledFuture<V> schedule(lmmarise.util.concurrent.Callable<V> callable,
+    public <V> ScheduledFuture<V> schedule(Callable<V> callable,
                                                                     long delay,
-                                                                    lmmarise.util.concurrent.TimeUnit unit) {
+                                                                    TimeUnit unit) {
         if (callable == null || unit == null)
             throw new NullPointerException();
-        lmmarise.util.concurrent.RunnableScheduledFuture<V> t = decorateTask(callable,
+        RunnableScheduledFuture<V> t = decorateTask(callable,
             new ScheduledFutureTask<V>(callable,
                                        triggerTime(delay, unit)));//构造ScheduledFutureTask任务
         delayedExecute(t);//任务执行主方法
@@ -625,18 +624,17 @@ public class ScheduledThreadPoolExecutor
     }
 
     /**
-     * @throws lmmarise.util.concurrent.RejectedExecutionException {@inheritDoc}
+     * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
      * @throws IllegalArgumentException   {@inheritDoc}
-     */
-    /**
+     *
      * 创建一个周期执行的任务，第一次执行延期时间为initialDelay，
      * 之后每隔period执行一次，不等待第一次执行完成就开始计时
-     * */
-    public lmmarise.util.concurrent.ScheduledFuture<?> scheduleAtFixedRate(Runnable command,
+     */
+    public ScheduledFuture<?> scheduleAtFixedRate(Runnable command,
                                                                            long initialDelay,
                                                                            long period,
-                                                                           lmmarise.util.concurrent.TimeUnit unit) {
+                                                                           TimeUnit unit) {
         if (command == null || unit == null)
             throw new NullPointerException();
         if (period <= 0)
@@ -647,14 +645,14 @@ public class ScheduledThreadPoolExecutor
                                           null,
                                           triggerTime(initialDelay, unit),//计算任务的延迟时间
                                           unit.toNanos(period));//计算任务的执行周期
-        lmmarise.util.concurrent.RunnableScheduledFuture<Void> t = decorateTask(command, sft);//执行用户自定义逻辑
+        RunnableScheduledFuture<Void> t = decorateTask(command, sft);//执行用户自定义逻辑
         sft.outerTask = t;//赋值给outerTask，准备重新入队等待下一次执行
         delayedExecute(t);//执行任务
         return t;
     }
 
     /**
-     * @throws lmmarise.util.concurrent.RejectedExecutionException {@inheritDoc}
+     * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
      * @throws IllegalArgumentException   {@inheritDoc}
      */
@@ -662,10 +660,7 @@ public class ScheduledThreadPoolExecutor
      * 创建一个周期执行的任务，第一次执行延期时间为initialDelay，
      * 在第一次执行完之后延迟delay后开始下一次执行
      * */
-    public lmmarise.util.concurrent.ScheduledFuture<?> scheduleWithFixedDelay(Runnable command,
-                                                                              long initialDelay,
-                                                                              long delay,
-                                                                              lmmarise.util.concurrent.TimeUnit unit) {
+    public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {
         if (command == null || unit == null)
             throw new NullPointerException();
         if (delay <= 0)
@@ -676,7 +671,7 @@ public class ScheduledThreadPoolExecutor
                                           null,
                                           triggerTime(initialDelay, unit),//计算任务的延迟时间
                                           unit.toNanos(-delay));//计算任务的执行周期
-        lmmarise.util.concurrent.RunnableScheduledFuture<Void> t = decorateTask(command, sft);//执行用户自定义逻辑
+        RunnableScheduledFuture<Void> t = decorateTask(command, sft);//执行用户自定义逻辑
         sft.outerTask = t;//赋值给outerTask，准备重新入队等待下一次执行
         delayedExecute(t);//执行任务
         return t;
@@ -685,18 +680,18 @@ public class ScheduledThreadPoolExecutor
     /**
      * Executes {@code command} with zero required delay.
      * This has effect equivalent to
-     * {@link #schedule(Runnable,long, lmmarise.util.concurrent.TimeUnit) schedule(command, 0, anyUnit)}.
+     * {@link #schedule(Runnable,long, TimeUnit) schedule(command, 0, anyUnit)}.
      * Note that inspections of the queue and of the list returned by
      * {@code shutdownNow} will access the zero-delayed
-     * {@link lmmarise.util.concurrent.ScheduledFuture}, not the {@code command} itself.
+     * {@link ScheduledFuture}, not the {@code command} itself.
      *
      * <p>A consequence of the use of {@code ScheduledFuture} objects is
      * that {@link ThreadPoolExecutor#afterExecute afterExecute} is always
      * called with a null second {@code Throwable} argument, even if the
      * {@code command} terminated abruptly.  Instead, the {@code Throwable}
-     * thrown by such a task can be obtained via {@link lmmarise.util.concurrent.Future#get}.
+     * thrown by such a task can be obtained via {@link Future#get}.
      *
-     * @throws lmmarise.util.concurrent.RejectedExecutionException at discretion of
+     * @throws RejectedExecutionException at discretion of
      *         {@code RejectedExecutionHandler}, if the task
      *         cannot be accepted for execution because the
      *         executor has been shut down
@@ -709,18 +704,18 @@ public class ScheduledThreadPoolExecutor
     // Override AbstractExecutorService methods
 
     /**
-     * @throws lmmarise.util.concurrent.RejectedExecutionException {@inheritDoc}
+     * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
      */
-    public lmmarise.util.concurrent.Future<?> submit(Runnable task) {
+    public Future<?> submit(Runnable task) {
         return schedule(task, 0, NANOSECONDS);
     }
 
     /**
-     * @throws lmmarise.util.concurrent.RejectedExecutionException {@inheritDoc}
+     * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
      */
-    public <T> lmmarise.util.concurrent.Future<T> submit(Runnable task, T result) {
+    public <T> Future<T> submit(Runnable task, T result) {
         return schedule(Executors.callable(task, result), 0, NANOSECONDS);
     }
 
@@ -865,7 +860,7 @@ public class ScheduledThreadPoolExecutor
      * fails to respond to interrupts may never terminate.
      *
      * @return list of tasks that never commenced execution.
-     *         Each element of this list is a {@link lmmarise.util.concurrent.ScheduledFuture},
+     *         Each element of this list is a {@link ScheduledFuture},
      *         including those tasks submitted using {@code execute},
      *         which are for scheduling purposes used as the basis of a
      *         zero-delay {@code ScheduledFuture}.
@@ -886,7 +881,7 @@ public class ScheduledThreadPoolExecutor
      *
      * @return the task queue
      */
-    public lmmarise.util.concurrent.BlockingQueue<Runnable> getQueue() {
+    public BlockingQueue<Runnable> getQueue() {
         return super.getQueue();
     }
 
@@ -928,8 +923,8 @@ public class ScheduledThreadPoolExecutor
         //初始容量
         private static final int INITIAL_CAPACITY = 16;
         //内部RunnableScheduledFuture数组，存放任务
-        private lmmarise.util.concurrent.RunnableScheduledFuture<?>[] queue =
-            new lmmarise.util.concurrent.RunnableScheduledFuture<?>[INITIAL_CAPACITY];
+        private RunnableScheduledFuture<?>[] queue =
+            new RunnableScheduledFuture<?>[INITIAL_CAPACITY];
         private final ReentrantLock lock = new ReentrantLock();
         private int size = 0;
 
@@ -970,7 +965,7 @@ public class ScheduledThreadPoolExecutor
          * Sets f's heapIndex if it is a ScheduledFutureTask.
          */
         //设置任务在堆里的索引
-        private void setIndex(lmmarise.util.concurrent.RunnableScheduledFuture<?> f, int idx) {
+        private void setIndex(RunnableScheduledFuture<?> f, int idx) {
             if (f instanceof ScheduledFutureTask)
                 ((ScheduledFutureTask)f).heapIndex = idx;
         }
@@ -983,10 +978,10 @@ public class ScheduledThreadPoolExecutor
          * 在k位置插入给定RunnableScheduledFuture
          * 从父节点开始向上找到合适位置
          */
-        private void siftUp(int k, lmmarise.util.concurrent.RunnableScheduledFuture<?> key) {
+        private void siftUp(int k, RunnableScheduledFuture<?> key) {
             while (k > 0) {
                 int parent = (k - 1) >>> 1;//找到父节点位置
-                lmmarise.util.concurrent.RunnableScheduledFuture<?> e = queue[parent];
+                RunnableScheduledFuture<?> e = queue[parent];
                 if (key.compareTo(e) >= 0)
                     break;
                 queue[k] = e;
@@ -1005,11 +1000,11 @@ public class ScheduledThreadPoolExecutor
          * 在k位置插入给定RunnableScheduledFuture
          * 从子节点开始向下找到合适位置
          */
-        private void siftDown(int k, lmmarise.util.concurrent.RunnableScheduledFuture<?> key) {
+        private void siftDown(int k, RunnableScheduledFuture<?> key) {
             int half = size >>> 1;
             while (k < half) {
                 int child = (k << 1) + 1;//找到子节点位置
-                lmmarise.util.concurrent.RunnableScheduledFuture<?> c = queue[child];
+                RunnableScheduledFuture<?> c = queue[child];
                 int right = child + 1;
                 if (right < size && c.compareTo(queue[right]) > 0)
                     c = queue[child = right];
@@ -1075,7 +1070,7 @@ public class ScheduledThreadPoolExecutor
 
                 setIndex(queue[i], -1);
                 int s = --size;
-                lmmarise.util.concurrent.RunnableScheduledFuture<?> replacement = queue[s];
+                RunnableScheduledFuture<?> replacement = queue[s];
                 queue[s] = null;
                 if (s != i) {
                     siftDown(i, replacement);
@@ -1106,7 +1101,7 @@ public class ScheduledThreadPoolExecutor
             return Integer.MAX_VALUE;
         }
 
-        public lmmarise.util.concurrent.RunnableScheduledFuture<?> peek() {
+        public RunnableScheduledFuture<?> peek() {
             final ReentrantLock lock = this.lock;
             lock.lock();
             try {
@@ -1119,7 +1114,7 @@ public class ScheduledThreadPoolExecutor
         public boolean offer(Runnable x) {
             if (x == null)
                 throw new NullPointerException();
-            lmmarise.util.concurrent.RunnableScheduledFuture<?> e = (lmmarise.util.concurrent.RunnableScheduledFuture<?>)x;
+            RunnableScheduledFuture<?> e = (RunnableScheduledFuture<?>)x;
             final ReentrantLock lock = this.lock;
             lock.lock();
             try {
@@ -1151,7 +1146,7 @@ public class ScheduledThreadPoolExecutor
             return offer(e);
         }
 
-        public boolean offer(Runnable e, long timeout, lmmarise.util.concurrent.TimeUnit unit) {
+        public boolean offer(Runnable e, long timeout, TimeUnit unit) {
             return offer(e);
         }
 
@@ -1164,9 +1159,9 @@ public class ScheduledThreadPoolExecutor
         /**
          * 弹出首个元素，其他元素上移
          */
-        private lmmarise.util.concurrent.RunnableScheduledFuture<?> finishPoll(lmmarise.util.concurrent.RunnableScheduledFuture<?> f) {
+        private RunnableScheduledFuture<?> finishPoll(RunnableScheduledFuture<?> f) {
             int s = --size;
-            lmmarise.util.concurrent.RunnableScheduledFuture<?> x = queue[s];
+            RunnableScheduledFuture<?> x = queue[s];
             queue[s] = null;
             if (s != 0)
                 siftDown(0, x);
@@ -1174,11 +1169,11 @@ public class ScheduledThreadPoolExecutor
             return f;
         }
 
-        public lmmarise.util.concurrent.RunnableScheduledFuture<?> poll() {
+        public RunnableScheduledFuture<?> poll() {
             final ReentrantLock lock = this.lock;
             lock.lock();
             try {
-                lmmarise.util.concurrent.RunnableScheduledFuture<?> first = queue[0];
+                RunnableScheduledFuture<?> first = queue[0];
                 if (first == null || first.getDelay(NANOSECONDS) > 0)
                     return null;
                 else
@@ -1188,12 +1183,12 @@ public class ScheduledThreadPoolExecutor
             }
         }
 
-        public lmmarise.util.concurrent.RunnableScheduledFuture<?> take() throws InterruptedException {
+        public RunnableScheduledFuture<?> take() throws InterruptedException {
             final ReentrantLock lock = this.lock;
             lock.lockInterruptibly();
             try {
                 for (;;) {
-                    lmmarise.util.concurrent.RunnableScheduledFuture<?> first = queue[0];
+                    RunnableScheduledFuture<?> first = queue[0];
                     if (first == null)
                         available.await();
                     else {
@@ -1222,14 +1217,14 @@ public class ScheduledThreadPoolExecutor
             }
         }
 
-        public lmmarise.util.concurrent.RunnableScheduledFuture<?> poll(long timeout, TimeUnit unit)
+        public RunnableScheduledFuture<?> poll(long timeout, TimeUnit unit)
             throws InterruptedException {
             long nanos = unit.toNanos(timeout);
             final ReentrantLock lock = this.lock;
             lock.lockInterruptibly();
             try {
                 for (;;) {
-                    lmmarise.util.concurrent.RunnableScheduledFuture<?> first = queue[0];
+                    RunnableScheduledFuture<?> first = queue[0];
                     if (first == null) {
                         if (nanos <= 0)
                             return null;
@@ -1269,7 +1264,7 @@ public class ScheduledThreadPoolExecutor
             lock.lock();
             try {
                 for (int i = 0; i < size; i++) {
-                    lmmarise.util.concurrent.RunnableScheduledFuture<?> t = queue[i];
+                    RunnableScheduledFuture<?> t = queue[i];
                     if (t != null) {
                         queue[i] = null;
                         setIndex(t, -1);
@@ -1286,9 +1281,9 @@ public class ScheduledThreadPoolExecutor
          * Used only by drainTo.  Call only when holding lock.
          * 只有在期满时返回首个元素
          */
-        private lmmarise.util.concurrent.RunnableScheduledFuture<?> peekExpired() {
+        private RunnableScheduledFuture<?> peekExpired() {
             // assert lock.isHeldByCurrentThread();
-            lmmarise.util.concurrent.RunnableScheduledFuture<?> first = queue[0];
+            RunnableScheduledFuture<?> first = queue[0];
             return (first == null || first.getDelay(NANOSECONDS) > 0) ?
                 null : first;
         }
@@ -1301,7 +1296,7 @@ public class ScheduledThreadPoolExecutor
             final ReentrantLock lock = this.lock;
             lock.lock();
             try {
-                lmmarise.util.concurrent.RunnableScheduledFuture<?> first;
+                RunnableScheduledFuture<?> first;
                 int n = 0;
                 while ((first = peekExpired()) != null) {
                     c.add(first);   // In this order, in case add() throws.
@@ -1324,7 +1319,7 @@ public class ScheduledThreadPoolExecutor
             final ReentrantLock lock = this.lock;
             lock.lock();
             try {
-                lmmarise.util.concurrent.RunnableScheduledFuture<?> first;
+                RunnableScheduledFuture<?> first;
                 int n = 0;
                 while (n < maxElements && (first = peekExpired()) != null) {
                     c.add(first);   // In this order, in case add() throws.
@@ -1371,7 +1366,7 @@ public class ScheduledThreadPoolExecutor
          * Snapshot iterator that works off copy of underlying q array.
          */
         private class Itr implements Iterator<Runnable> {
-            final lmmarise.util.concurrent.RunnableScheduledFuture<?>[] array;
+            final RunnableScheduledFuture<?>[] array;
             int cursor = 0;     // index of next element to return
             int lastRet = -1;   // index of last element, or -1 if no such
 

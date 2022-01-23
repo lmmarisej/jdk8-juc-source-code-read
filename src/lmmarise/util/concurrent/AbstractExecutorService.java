@@ -108,7 +108,7 @@ public abstract class AbstractExecutorService implements ExecutorService {
      */
     public lmmarise.util.concurrent.Future<?> submit(Runnable task) {
         if (task == null) throw new NullPointerException();
-        lmmarise.util.concurrent.RunnableFuture<Void> ftask = newTaskFor(task, null);
+        lmmarise.util.concurrent.RunnableFuture<Void> ftask = newTaskFor(task, null);       // 将Callable转化为Runnable
         execute(ftask);
         return ftask;
     }

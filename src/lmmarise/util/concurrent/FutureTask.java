@@ -60,6 +60,8 @@ import lmmarise.util.concurrent.locks.LockSupport;
  * @since 1.5
  * @author Doug Lea
  * @param <V> The result type returned by this FutureTask's {@code get} methods
+ *
+ *           适配器，将Callable转化为Runnable
  */
 public class FutureTask<V> implements RunnableFuture<V> {
     /*
@@ -101,17 +103,13 @@ public class FutureTask<V> implements RunnableFuture<V> {
     private static final int INTERRUPTED  = 6;//已中断
 
     /** The underlying callable; nulled out after running */
-    //内部持有的callable任务，运行完毕后置空
-    private lmmarise.util.concurrent.Callable<V> callable;
+    private lmmarise.util.concurrent.Callable<V> callable;      // 内部持有的callable任务，运行完毕后置空
     /** The result to return or exception to throw from get() */
-    //从get()中返回的结果或抛出的异常
-    private Object outcome; // non-volatile, protected by state reads/writes
+    private Object outcome; // non-volatile, protected by state reads/writes  从get()中返回的结果或抛出的异常
     /** The thread running the callable; CASed during run() */
-    //运行callable线程，在run()期间保持原子性
-    private volatile Thread runner;
+    private volatile Thread runner;     // 运行callable线程，在run()期间保持原子性
     /** Treiber stack of waiting threads */
-    //使用Treiber栈保存等待线程
-    private volatile WaitNode waiters;
+    private volatile WaitNode waiters;      // 使用Treiber栈保存等待线程，这里只保存栈顶元素
 
     /**
      * Returns result or throws exception for completed task.
@@ -192,12 +190,13 @@ public class FutureTask<V> implements RunnableFuture<V> {
 
     /**
      * @throws lmmarise.util.concurrent.CancellationException {@inheritDoc}
+     *
+     * 获取执行结果，结果未完成，将阻塞调用者线程
      */
-    //获取执行结果
     public V get() throws InterruptedException, lmmarise.util.concurrent.ExecutionException {
         int s = state;
         if (s <= COMPLETING)
-            s = awaitDone(false, 0L);
+            s = awaitDone(false, 0L);       // 阻塞——通知机制
         return report(s);
     }
 
@@ -274,15 +273,15 @@ public class FutureTask<V> implements RunnableFuture<V> {
                 V result;
                 boolean ran;
                 try {
-                    result = c.call();
+                    result = c.call();      // 将Callable的call转为Runnable的run
                     ran = true;
                 } catch (Throwable ex) {
                     result = null;
-                    ran = false;
-                    setException(ex);
+                    ran = false;        // 处理失败
+                    setException(ex);   // 任务失败获取不到结果，因此需要告诉调用者失败信息
                 }
-                if (ran)
-                    set(result);//设置执行结果
+                if (ran)        // 如果任务执行失败，不需要保存结果
+                    set(result);
             }
         } finally {
             // runner must be non-null until state is settled to
@@ -368,8 +367,9 @@ public class FutureTask<V> implements RunnableFuture<V> {
      * Simple linked list nodes to record waiting threads in a Treiber
      * stack.  See other classes such as Phaser and SynchronousQueue
      * for more detailed explanation.
+     *
+     * 等待线程的链表，使用Treiber栈实现
      */
-    //等待线程的链表，使用Treiber栈实现
     static final class WaitNode {
         volatile Thread thread;
         volatile WaitNode next;
@@ -412,14 +412,15 @@ public class FutureTask<V> implements RunnableFuture<V> {
      * @param timed true if use timed waits
      * @param nanos time to wait, if timed
      * @return state upon completion
+     *
+     * 等待任务完成或中止，直到线程中断或超时
      */
-    //等待任务完成或中止，直到线程中断或超时
     private int awaitDone(boolean timed, long nanos)
         throws InterruptedException {
         final long deadline = timed ? System.nanoTime() + nanos : 0L;
         WaitNode q = null;
         boolean queued = false;
-        for (;;) {//自旋
+        for (;;) {      // 利用CAS+State实现阻塞通知——机制，避免了使用AQS的Condition
             if (Thread.interrupted()) {//获取并清除中断状态
                 removeWaiter(q);//移除等待WaitNode
                 throw new InterruptedException();
@@ -434,11 +435,11 @@ public class FutureTask<V> implements RunnableFuture<V> {
             else if (s == COMPLETING) // cannot time out yet
                 Thread.yield();
             else if (q == null)
-                q = new WaitNode();
+                q = new WaitNode();     // 构建无锁并发栈，存储每个调用者线程
             else if (!queued)
-                //CAS修改waiter
+                // CAS修改waiter
                 queued = UNSAFE.compareAndSwapObject(this, waitersOffset,
-                                                     q.next = waiters, q);
+                                                     q.next = waiters, q);      // 入栈
             else if (timed) {
                 nanos = deadline - System.nanoTime();
                 if (nanos <= 0L) {

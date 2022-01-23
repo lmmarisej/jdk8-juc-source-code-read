@@ -36,32 +36,33 @@
 package lmmarise.util.concurrent;
 import java.util.*;
 
-import lmmarise.util.concurrent.atomic.AtomicInteger;
 import java.security.AccessControlContext;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
 import java.security.PrivilegedActionException;
 import java.security.AccessControlException;
+
+import lmmarise.util.concurrent.atomic.AtomicInteger;
 import sun.security.util.SecurityConstants;
 
 /**
  * Factory and utility methods for {@link Executor}, {@link
- * lmmarise.util.concurrent.ExecutorService}, {@link lmmarise.util.concurrent.ScheduledExecutorService}, {@link
- * lmmarise.util.concurrent.ThreadFactory}, and {@link lmmarise.util.concurrent.Callable} classes defined in this
+ * ExecutorService}, {@link ScheduledExecutorService}, {@link
+ * ThreadFactory}, and {@link Callable} classes defined in this
  * package. This class supports the following kinds of methods:
  *
  * <ul>
- *   <li> Methods that create and return an {@link lmmarise.util.concurrent.ExecutorService}
+ *   <li> Methods that create and return an {@link ExecutorService}
  *        set up with commonly useful configuration settings.
- *   <li> Methods that create and return a {@link lmmarise.util.concurrent.ScheduledExecutorService}
+ *   <li> Methods that create and return a {@link ScheduledExecutorService}
  *        set up with commonly useful configuration settings.
  *   <li> Methods that create and return a "wrapped" ExecutorService, that
  *        disables reconfiguration by making implementation-specific methods
  *        inaccessible.
- *   <li> Methods that create and return a {@link lmmarise.util.concurrent.ThreadFactory}
+ *   <li> Methods that create and return a {@link ThreadFactory}
  *        that sets newly created threads to a known state.
- *   <li> Methods that create and return a {@link lmmarise.util.concurrent.Callable}
+ *   <li> Methods that create and return a {@link Callable}
  *        out of other closure-like forms, so they can be used
  *        in execution methods requiring {@code Callable}.
  * </ul>
@@ -80,16 +81,18 @@ public class Executors {
      * If any thread terminates due to a failure during execution
      * prior to shutdown, a new one will take its place if needed to
      * execute subsequent tasks.  The threads in the pool will exist
-     * until it is explicitly {@link lmmarise.util.concurrent.ExecutorService#shutdown shutdown}.
+     * until it is explicitly {@link ExecutorService#shutdown shutdown}.
      *
      * @param nThreads the number of threads in the pool
      * @return the newly created thread pool
      * @throws IllegalArgumentException if {@code nThreads <= 0}
+     *
+     * 固定数目线程的线程池。
      */
-    public static lmmarise.util.concurrent.ExecutorService newFixedThreadPool(int nThreads) {
-        return new lmmarise.util.concurrent.ThreadPoolExecutor(nThreads, nThreads,
-                                      0L, lmmarise.util.concurrent.TimeUnit.MILLISECONDS,
-                                      new lmmarise.util.concurrent.LinkedBlockingQueue<Runnable>());
+    public static ExecutorService newFixedThreadPool(int nThreads) {
+        return new ThreadPoolExecutor(nThreads, nThreads,
+                                      0L, TimeUnit.MILLISECONDS,
+                                      new LinkedBlockingQueue<Runnable>());
     }
 
     /**
@@ -107,10 +110,10 @@ public class Executors {
      * @throws IllegalArgumentException if {@code parallelism <= 0}
      * @since 1.8
      */
-    public static lmmarise.util.concurrent.ExecutorService newWorkStealingPool(int parallelism) {
-        return new lmmarise.util.concurrent.ForkJoinPool
+    public static ExecutorService newWorkStealingPool(int parallelism) {
+        return new ForkJoinPool
             (parallelism,
-             lmmarise.util.concurrent.ForkJoinPool.defaultForkJoinWorkerThreadFactory,
+             ForkJoinPool.defaultForkJoinWorkerThreadFactory,
              null, true);
     }
 
@@ -122,8 +125,8 @@ public class Executors {
      * @see #newWorkStealingPool(int)
      * @since 1.8
      */
-    public static lmmarise.util.concurrent.ExecutorService newWorkStealingPool() {
-        return new lmmarise.util.concurrent.ForkJoinPool
+    public static ExecutorService newWorkStealingPool() {
+        return new ForkJoinPool
             (Runtime.getRuntime().availableProcessors(),
              ForkJoinPool.defaultForkJoinWorkerThreadFactory,
              null, true);
@@ -139,7 +142,7 @@ public class Executors {
      * available.  If any thread terminates due to a failure during
      * execution prior to shutdown, a new one will take its place if
      * needed to execute subsequent tasks.  The threads in the pool will
-     * exist until it is explicitly {@link lmmarise.util.concurrent.ExecutorService#shutdown
+     * exist until it is explicitly {@link ExecutorService#shutdown
      * shutdown}.
      *
      * @param nThreads the number of threads in the pool
@@ -148,10 +151,10 @@ public class Executors {
      * @throws NullPointerException if threadFactory is null
      * @throws IllegalArgumentException if {@code nThreads <= 0}
      */
-    public static lmmarise.util.concurrent.ExecutorService newFixedThreadPool(int nThreads, lmmarise.util.concurrent.ThreadFactory threadFactory) {
-        return new lmmarise.util.concurrent.ThreadPoolExecutor(nThreads, nThreads,
-                                      0L, lmmarise.util.concurrent.TimeUnit.MILLISECONDS,
-                                      new lmmarise.util.concurrent.LinkedBlockingQueue<Runnable>(),
+    public static ExecutorService newFixedThreadPool(int nThreads, ThreadFactory threadFactory) {
+        return new ThreadPoolExecutor(nThreads, nThreads,
+                                      0L, TimeUnit.MILLISECONDS,
+                                      new LinkedBlockingQueue<Runnable>(),
                                       threadFactory);
     }
 
@@ -167,12 +170,14 @@ public class Executors {
      * guaranteed not to be reconfigurable to use additional threads.
      *
      * @return the newly created single-threaded Executor
+     *
+     * 单线程线程池。
      */
-    public static lmmarise.util.concurrent.ExecutorService newSingleThreadExecutor() {
+    public static ExecutorService newSingleThreadExecutor() {
         return new FinalizableDelegatedExecutorService
-            (new lmmarise.util.concurrent.ThreadPoolExecutor(1, 1,
-                                    0L, lmmarise.util.concurrent.TimeUnit.MILLISECONDS,
-                                    new lmmarise.util.concurrent.LinkedBlockingQueue<Runnable>()));
+            (new ThreadPoolExecutor(1, 1,
+                                    0L, TimeUnit.MILLISECONDS,
+                                    new LinkedBlockingQueue<Runnable>()));
     }
 
     /**
@@ -189,10 +194,10 @@ public class Executors {
      * @return the newly created single-threaded Executor
      * @throws NullPointerException if threadFactory is null
      */
-    public static lmmarise.util.concurrent.ExecutorService newSingleThreadExecutor(lmmarise.util.concurrent.ThreadFactory threadFactory) {
+    public static ExecutorService newSingleThreadExecutor(ThreadFactory threadFactory) {
         return new FinalizableDelegatedExecutorService
-            (new lmmarise.util.concurrent.ThreadPoolExecutor(1, 1,
-                                    0L, lmmarise.util.concurrent.TimeUnit.MILLISECONDS,
+            (new ThreadPoolExecutor(1, 1,
+                                    0L, TimeUnit.MILLISECONDS,
                                     new LinkedBlockingQueue<Runnable>(),
                                     threadFactory));
     }
@@ -209,14 +214,16 @@ public class Executors {
      * the cache. Thus, a pool that remains idle for long enough will
      * not consume any resources. Note that pools with similar
      * properties but different details (for example, timeout parameters)
-     * may be created using {@link lmmarise.util.concurrent.ThreadPoolExecutor} constructors.
+     * may be created using {@link ThreadPoolExecutor} constructors.
      *
      * @return the newly created thread pool
+     *
+     * 每来一个任务就创建一个线程。
      */
-    public static lmmarise.util.concurrent.ExecutorService newCachedThreadPool() {
-        return new lmmarise.util.concurrent.ThreadPoolExecutor(0, Integer.MAX_VALUE,
-                                      60L, lmmarise.util.concurrent.TimeUnit.SECONDS,
-                                      new lmmarise.util.concurrent.SynchronousQueue<Runnable>());
+    public static ExecutorService newCachedThreadPool() {
+        return new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+                                      60L, TimeUnit.SECONDS,
+                                      new SynchronousQueue<Runnable>());
     }
 
     /**
@@ -228,9 +235,9 @@ public class Executors {
      * @return the newly created thread pool
      * @throws NullPointerException if threadFactory is null
      */
-    public static lmmarise.util.concurrent.ExecutorService newCachedThreadPool(lmmarise.util.concurrent.ThreadFactory threadFactory) {
-        return new lmmarise.util.concurrent.ThreadPoolExecutor(0, Integer.MAX_VALUE,
-                                      60L, lmmarise.util.concurrent.TimeUnit.SECONDS,
+    public static ExecutorService newCachedThreadPool(ThreadFactory threadFactory) {
+        return new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+                                      60L, TimeUnit.SECONDS,
                                       new SynchronousQueue<Runnable>(),
                                       threadFactory);
     }
@@ -247,10 +254,12 @@ public class Executors {
      * {@code newScheduledThreadPool(1)} the returned executor is
      * guaranteed not to be reconfigurable to use additional threads.
      * @return the newly created scheduled executor
+     *
+     * 单线程具有任务调度功能的线程池。
      */
-    public static lmmarise.util.concurrent.ScheduledExecutorService newSingleThreadScheduledExecutor() {
+    public static ScheduledExecutorService newSingleThreadScheduledExecutor() {
         return new DelegatedScheduledExecutorService
-            (new lmmarise.util.concurrent.ScheduledThreadPoolExecutor(1));
+            (new ScheduledThreadPoolExecutor(1));
     }
 
     /**
@@ -269,9 +278,9 @@ public class Executors {
      * @return a newly created scheduled executor
      * @throws NullPointerException if threadFactory is null
      */
-    public static lmmarise.util.concurrent.ScheduledExecutorService newSingleThreadScheduledExecutor(lmmarise.util.concurrent.ThreadFactory threadFactory) {
+    public static ScheduledExecutorService newSingleThreadScheduledExecutor(ThreadFactory threadFactory) {
         return new DelegatedScheduledExecutorService
-            (new lmmarise.util.concurrent.ScheduledThreadPoolExecutor(1, threadFactory));
+            (new ScheduledThreadPoolExecutor(1, threadFactory));
     }
 
     /**
@@ -281,9 +290,11 @@ public class Executors {
      * even if they are idle
      * @return a newly created scheduled thread pool
      * @throws IllegalArgumentException if {@code corePoolSize < 0}
+     *
+     * 多线程具有任务调度功能的线程池。
      */
-    public static lmmarise.util.concurrent.ScheduledExecutorService newScheduledThreadPool(int corePoolSize) {
-        return new lmmarise.util.concurrent.ScheduledThreadPoolExecutor(corePoolSize);
+    public static ScheduledExecutorService newScheduledThreadPool(int corePoolSize) {
+        return new ScheduledThreadPoolExecutor(corePoolSize);
     }
 
     /**
@@ -297,14 +308,14 @@ public class Executors {
      * @throws IllegalArgumentException if {@code corePoolSize < 0}
      * @throws NullPointerException if threadFactory is null
      */
-    public static lmmarise.util.concurrent.ScheduledExecutorService newScheduledThreadPool(
-            int corePoolSize, lmmarise.util.concurrent.ThreadFactory threadFactory) {
+    public static ScheduledExecutorService newScheduledThreadPool(
+            int corePoolSize, ThreadFactory threadFactory) {
         return new ScheduledThreadPoolExecutor(corePoolSize, threadFactory);
     }
 
     /**
      * Returns an object that delegates all defined {@link
-     * lmmarise.util.concurrent.ExecutorService} methods to the given executor, but not any
+     * ExecutorService} methods to the given executor, but not any
      * other methods that might otherwise be accessible using
      * casts. This provides a way to safely "freeze" configuration and
      * disallow tuning of a given concrete implementation.
@@ -312,7 +323,7 @@ public class Executors {
      * @return an {@code ExecutorService} instance
      * @throws NullPointerException if executor null
      */
-    public static lmmarise.util.concurrent.ExecutorService unconfigurableExecutorService(lmmarise.util.concurrent.ExecutorService executor) {
+    public static ExecutorService unconfigurableExecutorService(ExecutorService executor) {
         if (executor == null)
             throw new NullPointerException();
         return new DelegatedExecutorService(executor);
@@ -320,7 +331,7 @@ public class Executors {
 
     /**
      * Returns an object that delegates all defined {@link
-     * lmmarise.util.concurrent.ScheduledExecutorService} methods to the given executor, but
+     * ScheduledExecutorService} methods to the given executor, but
      * not any other methods that might otherwise be accessible using
      * casts. This provides a way to safely "freeze" configuration and
      * disallow tuning of a given concrete implementation.
@@ -328,7 +339,7 @@ public class Executors {
      * @return a {@code ScheduledExecutorService} instance
      * @throws NullPointerException if executor null
      */
-    public static lmmarise.util.concurrent.ScheduledExecutorService unconfigurableScheduledExecutorService(lmmarise.util.concurrent.ScheduledExecutorService executor) {
+    public static ScheduledExecutorService unconfigurableScheduledExecutorService(ScheduledExecutorService executor) {
         if (executor == null)
             throw new NullPointerException();
         return new DelegatedScheduledExecutorService(executor);
@@ -350,7 +361,7 @@ public class Executors {
      * of the thread created by this factory.
      * @return a thread factory
      */
-    public static lmmarise.util.concurrent.ThreadFactory defaultThreadFactory() {
+    public static ThreadFactory defaultThreadFactory() {
         return new DefaultThreadFactory();
     }
 
@@ -374,7 +385,7 @@ public class Executors {
      * java.lang.ThreadLocal} or {@link
      * java.lang.InheritableThreadLocal} values. If necessary,
      * particular values of thread locals can be set or reset before
-     * any task runs in {@link lmmarise.util.concurrent.ThreadPoolExecutor} subclasses using
+     * any task runs in {@link ThreadPoolExecutor} subclasses using
      * {@link ThreadPoolExecutor#beforeExecute(Thread, Runnable)}.
      * Also, if it is necessary to initialize worker threads to have
      * the same InheritableThreadLocal settings as some other
@@ -387,12 +398,12 @@ public class Executors {
      * context does not have permission to both get and set context
      * class loader
      */
-    public static lmmarise.util.concurrent.ThreadFactory privilegedThreadFactory() {
+    public static ThreadFactory privilegedThreadFactory() {
         return new PrivilegedThreadFactory();
     }
 
     /**
-     * Returns a {@link lmmarise.util.concurrent.Callable} object that, when
+     * Returns a {@link Callable} object that, when
      * called, runs the given task and returns the given result.  This
      * can be useful when applying methods requiring a
      * {@code Callable} to an otherwise resultless action.
@@ -402,56 +413,56 @@ public class Executors {
      * @return a callable object
      * @throws NullPointerException if task null
      */
-    public static <T> lmmarise.util.concurrent.Callable<T> callable(Runnable task, T result) {
+    public static <T> Callable<T> callable(Runnable task, T result) {
         if (task == null)
             throw new NullPointerException();
         return new RunnableAdapter<T>(task, result);
     }
 
     /**
-     * Returns a {@link lmmarise.util.concurrent.Callable} object that, when
+     * Returns a {@link Callable} object that, when
      * called, runs the given task and returns {@code null}.
      * @param task the task to run
      * @return a callable object
      * @throws NullPointerException if task null
      */
-    public static lmmarise.util.concurrent.Callable<Object> callable(Runnable task) {
+    public static Callable<Object> callable(Runnable task) {
         if (task == null)
             throw new NullPointerException();
         return new RunnableAdapter<Object>(task, null);
     }
 
     /**
-     * Returns a {@link lmmarise.util.concurrent.Callable} object that, when
+     * Returns a {@link Callable} object that, when
      * called, runs the given privileged action and returns its result.
      * @param action the privileged action to run
      * @return a callable object
      * @throws NullPointerException if action null
      */
-    public static lmmarise.util.concurrent.Callable<Object> callable(final PrivilegedAction<?> action) {
+    public static Callable<Object> callable(final PrivilegedAction<?> action) {
         if (action == null)
             throw new NullPointerException();
-        return new lmmarise.util.concurrent.Callable<Object>() {
+        return new Callable<Object>() {
             public Object call() { return action.run(); }};
     }
 
     /**
-     * Returns a {@link lmmarise.util.concurrent.Callable} object that, when
+     * Returns a {@link Callable} object that, when
      * called, runs the given privileged exception action and returns
      * its result.
      * @param action the privileged exception action to run
      * @return a callable object
      * @throws NullPointerException if action null
      */
-    public static lmmarise.util.concurrent.Callable<Object> callable(final PrivilegedExceptionAction<?> action) {
+    public static Callable<Object> callable(final PrivilegedExceptionAction<?> action) {
         if (action == null)
             throw new NullPointerException();
-        return new lmmarise.util.concurrent.Callable<Object>() {
+        return new Callable<Object>() {
             public Object call() throws Exception { return action.run(); }};
     }
 
     /**
-     * Returns a {@link lmmarise.util.concurrent.Callable} object that will, when called,
+     * Returns a {@link Callable} object that will, when called,
      * execute the given {@code callable} under the current access
      * control context. This method should normally be invoked within
      * an {@link AccessController#doPrivileged AccessController.doPrivileged}
@@ -464,14 +475,14 @@ public class Executors {
      * @return a callable object
      * @throws NullPointerException if callable null
      */
-    public static <T> lmmarise.util.concurrent.Callable<T> privilegedCallable(lmmarise.util.concurrent.Callable<T> callable) {
+    public static <T> Callable<T> privilegedCallable(Callable<T> callable) {
         if (callable == null)
             throw new NullPointerException();
         return new PrivilegedCallable<T>(callable);
     }
 
     /**
-     * Returns a {@link lmmarise.util.concurrent.Callable} object that will, when called,
+     * Returns a {@link Callable} object that will, when called,
      * execute the given {@code callable} under the current access
      * control context, with the current context class loader as the
      * context class loader. This method should normally be invoked
@@ -490,7 +501,7 @@ public class Executors {
      * context does not have permission to both set and get context
      * class loader
      */
-    public static <T> lmmarise.util.concurrent.Callable<T> privilegedCallableUsingCurrentClassLoader(lmmarise.util.concurrent.Callable<T> callable) {
+    public static <T> Callable<T> privilegedCallableUsingCurrentClassLoader(Callable<T> callable) {
         if (callable == null)
             throw new NullPointerException();
         return new PrivilegedCallableUsingCurrentClassLoader<T>(callable);
@@ -501,7 +512,7 @@ public class Executors {
     /**
      * A callable that runs given task and returns given result
      */
-    static final class RunnableAdapter<T> implements lmmarise.util.concurrent.Callable<T> {
+    static final class RunnableAdapter<T> implements Callable<T> {
         final Runnable task;
         final T result;
         RunnableAdapter(Runnable task, T result) {
@@ -517,11 +528,11 @@ public class Executors {
     /**
      * A callable that runs under established access control settings
      */
-    static final class PrivilegedCallable<T> implements lmmarise.util.concurrent.Callable<T> {
-        private final lmmarise.util.concurrent.Callable<T> task;
+    static final class PrivilegedCallable<T> implements Callable<T> {
+        private final Callable<T> task;
         private final AccessControlContext acc;
 
-        PrivilegedCallable(lmmarise.util.concurrent.Callable<T> task) {
+        PrivilegedCallable(Callable<T> task) {
             this.task = task;
             this.acc = AccessController.getContext();
         }
@@ -544,12 +555,12 @@ public class Executors {
      * A callable that runs under established access control settings and
      * current ClassLoader
      */
-    static final class PrivilegedCallableUsingCurrentClassLoader<T> implements lmmarise.util.concurrent.Callable<T> {
-        private final lmmarise.util.concurrent.Callable<T> task;
+    static final class PrivilegedCallableUsingCurrentClassLoader<T> implements Callable<T> {
+        private final Callable<T> task;
         private final AccessControlContext acc;
         private final ClassLoader ccl;
 
-        PrivilegedCallableUsingCurrentClassLoader(lmmarise.util.concurrent.Callable<T> task) {
+        PrivilegedCallableUsingCurrentClassLoader(Callable<T> task) {
             SecurityManager sm = System.getSecurityManager();
             if (sm != null) {
                 // Calls to getContextClassLoader from this class
@@ -664,41 +675,41 @@ public class Executors {
      * of an ExecutorService implementation.
      */
     static class DelegatedExecutorService extends AbstractExecutorService {
-        private final lmmarise.util.concurrent.ExecutorService e;
-        DelegatedExecutorService(lmmarise.util.concurrent.ExecutorService executor) { e = executor; }
+        private final ExecutorService e;
+        DelegatedExecutorService(ExecutorService executor) { e = executor; }
         public void execute(Runnable command) { e.execute(command); }
         public void shutdown() { e.shutdown(); }
         public List<Runnable> shutdownNow() { return e.shutdownNow(); }
         public boolean isShutdown() { return e.isShutdown(); }
         public boolean isTerminated() { return e.isTerminated(); }
-        public boolean awaitTermination(long timeout, lmmarise.util.concurrent.TimeUnit unit)
+        public boolean awaitTermination(long timeout, TimeUnit unit)
             throws InterruptedException {
             return e.awaitTermination(timeout, unit);
         }
-        public lmmarise.util.concurrent.Future<?> submit(Runnable task) {
+        public Future<?> submit(Runnable task) {
             return e.submit(task);
         }
-        public <T> lmmarise.util.concurrent.Future<T> submit(lmmarise.util.concurrent.Callable<T> task) {
+        public <T> Future<T> submit(Callable<T> task) {
             return e.submit(task);
         }
-        public <T> lmmarise.util.concurrent.Future<T> submit(Runnable task, T result) {
+        public <T> Future<T> submit(Runnable task, T result) {
             return e.submit(task, result);
         }
-        public <T> List<lmmarise.util.concurrent.Future<T>> invokeAll(Collection<? extends lmmarise.util.concurrent.Callable<T>> tasks)
+        public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks)
             throws InterruptedException {
             return e.invokeAll(tasks);
         }
-        public <T> List<Future<T>> invokeAll(Collection<? extends lmmarise.util.concurrent.Callable<T>> tasks,
-                                             long timeout, lmmarise.util.concurrent.TimeUnit unit)
+        public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks,
+                                             long timeout, TimeUnit unit)
             throws InterruptedException {
             return e.invokeAll(tasks, timeout, unit);
         }
-        public <T> T invokeAny(Collection<? extends lmmarise.util.concurrent.Callable<T>> tasks)
-            throws InterruptedException, lmmarise.util.concurrent.ExecutionException {
+        public <T> T invokeAny(Collection<? extends Callable<T>> tasks)
+            throws InterruptedException, ExecutionException {
             return e.invokeAny(tasks);
         }
-        public <T> T invokeAny(Collection<? extends lmmarise.util.concurrent.Callable<T>> tasks,
-                               long timeout, lmmarise.util.concurrent.TimeUnit unit)
+        public <T> T invokeAny(Collection<? extends Callable<T>> tasks,
+                               long timeout, TimeUnit unit)
             throws InterruptedException, ExecutionException, TimeoutException {
             return e.invokeAny(tasks, timeout, unit);
         }
@@ -720,19 +731,19 @@ public class Executors {
      */
     static class DelegatedScheduledExecutorService
             extends DelegatedExecutorService
-            implements lmmarise.util.concurrent.ScheduledExecutorService {
-        private final lmmarise.util.concurrent.ScheduledExecutorService e;
+            implements ScheduledExecutorService {
+        private final ScheduledExecutorService e;
         DelegatedScheduledExecutorService(ScheduledExecutorService executor) {
             super(executor);
             e = executor;
         }
-        public lmmarise.util.concurrent.ScheduledFuture<?> schedule(Runnable command, long delay, lmmarise.util.concurrent.TimeUnit unit) {
+        public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
             return e.schedule(command, delay, unit);
         }
-        public <V> lmmarise.util.concurrent.ScheduledFuture<V> schedule(Callable<V> callable, long delay, lmmarise.util.concurrent.TimeUnit unit) {
+        public <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit) {
             return e.schedule(callable, delay, unit);
         }
-        public lmmarise.util.concurrent.ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, lmmarise.util.concurrent.TimeUnit unit) {
+        public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit) {
             return e.scheduleAtFixedRate(command, initialDelay, period, unit);
         }
         public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {

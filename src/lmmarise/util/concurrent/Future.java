@@ -100,6 +100,8 @@ package lmmarise.util.concurrent;
  * @since 1.5
  * @author Doug Lea
  * @param <V> The result type returned by this Future's {@code get} method
+ *
+ *           相当于票据，主要用于取回返回结果
  */
 public interface Future<V> {
 
