@@ -952,8 +952,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * of local joins if they are removed from an interior queue slot
      * in WorkQueue.tryRemoveAndExec. We don't need the proxy to
      * actually do anything beyond having a unique identity.
-     */
-    /**
+     *
      * 内部占位类，用于替换队列中的join的任务
      */
     static final class EmptyTask extends lmmarise.util.concurrent.ForkJoinTask<Void> {
@@ -1002,8 +1001,7 @@ public class ForkJoinPool extends AbstractExecutorService {
      * do not want multiple WorkQueue instances or multiple queue
      * arrays sharing cache lines. The @Contended annotation alerts
      * JVMs to try to keep instances apart.
-     */
-    /**
+     *
      * work-stealing模式队列，使用Contended注解避免伪共享
      */
     @sun.misc.Contended
